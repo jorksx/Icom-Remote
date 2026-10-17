@@ -1,0 +1,44 @@
+{
+  "radios": {
+    "1": {
+      "name": "IC-7300",
+      "port": "COM8",
+      "baud": 115200,
+      "default_addr": 148,
+      "auto_connect": true,
+      "vfo_offset": 0,
+      "ptt_key_code": 0,
+      "ptt_key_name": "None",
+      "ptt_global": false,
+      "audio_rx_dev": "",
+      "audio_tx_dev": "",
+      "audio_spk_dev": "",
+      "audio_mic_dev": "",
+      "audio_rx_vol": 100,
+      "detected_addr": 148,
+      "sql_pct": 0,
+      "rigctld_port": 4532,
+      "vcom_port": ""
+    },
+    "2": {
+      "name": "IC-9700",
+      "port": "COM9",
+      "baud": 115200,
+      "default_addr": 162,
+      "auto_connect": true,
+      "vfo_offset": 0,
+      "ptt_key_code": 0,
+      "ptt_key_name": "None",
+      "ptt_global": false,
+      "audio_rx_dev": "",
+      "audio_tx_dev": "",
+      "audio_spk_dev": "",
+      "audio_mic_dev": "",
+      "audio_rx_vol": 100,
+      "detected_addr": 162,
+      "sql_pct": 0,
+      "rigctld_port": 4533,
+      "vcom_port": ""
+    }
+  }
+}

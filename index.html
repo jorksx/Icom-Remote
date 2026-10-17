@@ -1,0 +1,1387 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Icom Remote Control</title>
+    <style>
+        /* ALKUPERÄISET TYYLISI */
+        body {
+            background-color: #1a1a1a;
+            color: #e0e0e0;
+            font-family: system-ui, -apple-system, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+            user-select: none;
+            /* Estää tekstin valinnan rullatessa */
+        }
+
+        .container {
+            background-color: #242424;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+            width: 100%;
+            max-width: 450px;
+            text-align: center;
+        }
+
+        /* LISÄTTY: NUMEROIDEN TAIKAEFEKTIT */
+        .frequency-display {
+            font-size: 2.8rem;
+            font-weight: bold;
+            color: #4da6ff;
+            margin: 10px 0 5px 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: monospace;
+        }
+
+        .digit {
+            padding: 0 2px;
+            border-radius: 4px;
+            transition: all 0.1s ease;
+            cursor: pointer;
+            display: inline-block;
+        }
+
+        .digit:hover {
+            background-color: #444;
+            color: #fff;
+            transform: scale(1.1);
+            text-shadow: 0 0 10px rgba(77, 166, 255, 0.7);
+        }
+
+        .digit.changed {
+            animation: pulse 0.15s ease-out;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.2);
+                color: #fff;
+            }
+
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        .dot {
+            color: #888;
+            margin: 0 2px;
+        }
+
+        /* LISÄTTY: AUTH-SIVUN TYYLIT */
+        #login-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #1a1a1a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+
+        .login-box {
+            background-color: #242424;
+            padding: 2rem;
+            border-radius: 8px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            width: 300px;
+        }
+
+        #radio-ui {
+            display: none;
+        }
+
+        /* Piilossa kunnes auth läpi */
+
+        /* LOPUT ALKUPERÄISET TYYLISI */
+        .mode-display {
+            font-size: 1.5rem;
+            color: #ffaa00;
+            margin-bottom: 15px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.1s ease;
+            user-select: none;
+        }
+
+        .mode-display:hover {
+            transform: scale(1.05);
+            color: #ffd480;
+        }
+
+        /* LISÄTTY: MODE POPUP TYYLIT */
+        #mode-popup {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            backdrop-filter: blur(2px);
+        }
+
+        .mode-grid {
+            background-color: #242424;
+            padding: 20px;
+            border-radius: 8px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .mode-grid button {
+            font-size: 1.2rem;
+        }
+
+        .mode-btn {
+            background-color: #333;
+            color: #ffaa00;
+            font-weight: bold;
+        }
+
+        .mode-btn:hover {
+            background-color: #444;
+        }
+
+        .mode-close-btn {
+            grid-column: span 3;
+            background-color: #dc3545;
+            margin-top: 10px;
+        }
+
+        .mode-close-btn:hover {
+            background-color: #c82333;
+        }
+
+        .status {
+            font-size: 0.9rem;
+            color: #aaa;
+            margin-bottom: 20px;
+        }
+
+        .meter-wrapper {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .meter-bg {
+            background-color: #333;
+            border-radius: 4px;
+            height: 20px;
+            width: 100%;
+            overflow: hidden;
+            border: 1px solid #444;
+            position: relative;
+        }
+
+        .meter-fill {
+            background-color: #4da6ff;
+            height: 100%;
+            width: 0%;
+            transition: width 0.1s linear, background-color 0.1s linear;
+        }
+
+        .meter-text {
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #e0e0e0;
+            margin-top: 5px;
+        }
+
+        .control-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .band-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .band-group button {
+            flex: 1 1 calc(33.333% - 10px);
+            padding: 10px;
+            font-size: 1rem;
+            box-sizing: border-box;
+        }
+
+        .band-group button.atu-btn {
+            flex: 1 1 100%;
+            margin-top: 5px;
+            font-weight: bold;
+            background-color: #ffc107;
+            color: #000;
+        }
+
+        .audio-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 15px;
+            background-color: #2c2c2c;
+            padding: 15px;
+            border-radius: 6px;
+        }
+
+        .audio-group label {
+            text-align: left;
+            font-size: 0.85rem;
+            color: #aaa;
+            margin-bottom: -5px;
+        }
+
+        input[type="text"],
+        input[type="password"],
+        select {
+            width: 100%;
+            padding: 12px;
+            background-color: #333;
+            border: 1px solid #444;
+            color: #fff;
+            border-radius: 4px;
+            font-size: 1rem;
+            box-sizing: border-box;
+        }
+
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 4px;
+            font-size: 1.1rem;
+            width: 100%;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        button:disabled {
+            background-color: #444;
+            color: #888;
+            cursor: not-allowed;
+        }
+
+        button.step-btn {
+            background-color: #444;
+            font-size: 1.5rem;
+            font-weight: bold;
+            width: 50px;
+            padding: 0;
+            height: 47px;
+        }
+
+        button.success-btn {
+            background-color: #28a745;
+        }
+
+        /* Filtterinapit */
+        button.fil-btn {
+            background-color: transparent;
+            color: #888;
+            border: 1px solid #555;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        button.fil-btn:hover {
+            background-color: #4da6ff;
+            color: #fff;
+            border-color: #4da6ff;
+        }
+
+        /* Muistien X nappi */
+        .mem-wrap {
+            position: relative;
+            display: flex;
+            flex: 1 1 calc(33.333% - 10px);
+        }
+
+        .mem-wrap button {
+            width: 100%;
+            border-radius: 4px !important;
+            padding-right: 25px;
+            font-size: 0.9rem;
+            margin: 0;
+            padding: 10px 0;
+        }
+
+        .mem-del {
+            position: absolute !important;
+            right: 4px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: transparent !important;
+            color: #ff4d4d !important;
+            width: 20px !important;
+            height: 20px !important;
+            min-width: 0;
+            padding: 0 !important;
+            font-size: 1rem !important;
+            border: none !important;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50% !important;
+            font-weight: bold;
+        }
+
+        .mem-del:hover {
+            background-color: rgba(255, 0, 0, 0.2) !important;
+            color: #fff !important;
+        }
+
+        button#ptt-btn {
+            height: 70px;
+            font-size: 1.8rem;
+            font-weight: bold;
+            margin-bottom: 20px;
+            transition: background-color 0.1s;
+            width: 100%;
+        }
+
+        button#ptt-btn.tx-active {
+            background-color: #dc3545 !important;
+        }
+
+        .section-label {
+            text-align: left;
+            font-size: 0.9rem;
+            color: #888;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .radio-tab-btn {
+            background-color: transparent;
+            color: #888;
+            transition: all 0.15s ease;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .radio-tab-btn.active {
+            background-color: #007bff !important;
+            color: #fff !important;
+            box-shadow: 0 2px 6px rgba(0, 123, 255, 0.4);
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="login-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: #1a1a1a; display: flex; justify-content: center; align-items: center; z-index: 9999;">
+        <div class="login-box">
+            <h2 style="color:#4da6ff; margin-bottom:20px;">Icom Remote</h2>
+            <p style="color:#aaa; font-size:0.9rem; margin-bottom:20px;">PIN Protected Access</p>
+            <input type="password" id="login-pin" placeholder="****" style="margin-bottom:15px; text-align:center; letter-spacing: 5px; font-size: 1.5rem; width: 100%; padding: 10px; border-radius: 4px; border: 1px solid #4da6ff; background-color: #333; color: white;">
+            <button onclick="kirjauduSisaan()" style="width: 100%; font-size: 1.2rem; background-color: #28a745;">Unlock</button>
+            <p id="login-err" style="color: #ff4d4d; font-size: 0.9rem; margin-top: 10px; display: none;">Invalid PIN</p>
+        </div>
+    </div>
+
+    <div id="mode-popup">
+        <div class="mode-grid">
+            <button class="mode-btn" onclick="valitseMode('LSB')">LSB</button>
+            <button class="mode-btn" onclick="valitseMode('USB')">USB</button>
+            <button class="mode-btn" onclick="valitseMode('FM')">FM</button>
+            <button class="mode-btn" onclick="valitseMode('AM')">AM</button>
+            <button class="mode-btn" onclick="valitseMode('CW')">CW</button>
+            <button class="mode-btn" onclick="valitseMode('RTTY')">RTTY</button>
+            <button class="mode-btn" onclick="valitseMode('LSB-D')">LSB-D</button>
+            <button class="mode-btn" onclick="valitseMode('USB-D')">USB-D</button>
+            <button class="mode-btn" onclick="valitseMode('FM-D')">FM-D</button>
+            <button class="mode-close-btn" onclick="suljeModeValikko()">Cancel</button>
+        </div>
+    </div>
+
+    <div id="radio-ui" class="container">
+        <div
+            style="display: flex; justify-content: space-between; align-items: center; font-family: monospace; color: #888; font-size: 0.9rem; margin-bottom: 10px;">
+            <div id="clock-local" style="text-align: left; flex:1;">00:00:00</div>
+            <div id="online-status" style="color:#28a745; font-family:sans-serif; font-size: 0.8rem; font-weight: bold; flex: 1; text-align: center; letter-spacing: 1px;">ONLINE</div>
+            <div id="clock-utc" style="text-align: right; flex:1;">00:00:00 Z</div>
+        </div>
+
+        <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 10px;">
+            <div style="display: flex; gap: 4px; flex: 1.5; background: #1c1c1f; padding: 3px; border-radius: 8px; border: 1px solid #3b82f6;">
+                <button type="button" id="radio-btn-1" onclick="vaihdaValittuaRadiota('1')" class="radio-tab-btn active" style="flex: 1; padding: 7px 4px; font-size: 0.85rem; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px;">
+                    <span id="radio-btn-lbl-1">IC-7300</span>
+                    <span id="radio-btn-dot-1" style="width: 7px; height: 7px; border-radius: 50%; background: #28a745; display: inline-block;"></span>
+                    <span id="radio-btn-spk-1" style="font-size: 0.75rem; display: none;" title="Audio Active">🔊</span>
+                </button>
+                <button type="button" id="radio-btn-2" onclick="vaihdaValittuaRadiota('2')" class="radio-tab-btn" style="flex: 1; padding: 7px 4px; font-size: 0.85rem; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px;">
+                    <span id="radio-btn-lbl-2">IC-9700</span>
+                    <span id="radio-btn-dot-2" style="width: 7px; height: 7px; border-radius: 50%; background: #666; display: inline-block;"></span>
+                    <span id="radio-btn-spk-2" style="font-size: 0.75rem; display: none;" title="Audio Active">🔊</span>
+                </button>
+            </div>
+            <button id="mob-pwr-btn" onclick="vaihdaRadionVirta()" style="width: auto; padding: 8px 12px; font-size: 0.85rem; background-color: #1e3a8a; border: 1px solid #3b82f6;">Power ON</button>
+            <button class="fil-btn" onclick="vaihdaFiltteri(1)" style="width: auto; padding: 8px 10px;">FIL1</button>
+            <button class="fil-btn" onclick="vaihdaFiltteri(2)" style="width: auto; padding: 8px 10px;">FIL2</button>
+            <button class="fil-btn" onclick="vaihdaFiltteri(3)" style="width: auto; padding: 8px 10px;">FIL3</button>
+        </div>
+
+        <div style="display: flex; justify-content: center; align-items: center; gap: 15px; margin-top: 10px; margin-bottom: 5px;">
+            <button class="step-btn" onclick="muutaTaajuutta(-1)" style="font-size: 2rem; padding: 0 20px;">-</button>
+            <div class="frequency-display" id="freq-text" style="margin-bottom: 0;">Waiting...</div>
+            <button class="step-btn" onclick="muutaTaajuutta(1)" style="font-size: 2rem; padding: 0 20px;">+</button>
+        </div>
+
+        <div style="display: flex; justify-content: center; align-items: center; gap: 15px; margin-bottom: 10px;">
+            <div class="mode-display" id="mode-text" onclick="avaaModeValikko()" title="Select Mode" style="margin-bottom: 0;">MODE</div>
+            <select id="step-select" style="font-size: 1.1rem; padding: 5px 10px; background-color: #333; color: white; border: 1px solid #555; border-radius: 4px; cursor: pointer;">
+                <option value="10">10 Hz</option>
+                <option value="100">100 Hz</option>
+                <option value="1000" selected>1 kHz</option>
+                <option value="5000">5 kHz</option>
+                <option value="10000">10 kHz</option>
+                <option value="12500">12.5 kHz</option>
+                <option value="25000">25 kHz</option>
+            </select>
+        </div>
+
+        <div style="position: relative; width: 100%; margin-bottom: 14px;">
+            <canvas id="waterfall" width="475" height="150" style="width:100%; border-radius:4px; display:block; background:#000; border:1px solid #444; image-rendering: pixelated; box-sizing: border-box;"></canvas>
+            <div style="position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: rgba(255, 0, 0, 0.5); pointer-events: none; z-index: 10; box-shadow: 0 0 2px rgba(255,0,0,0.5);"></div>
+            <div id="wf-offline" style="display:none; position:absolute; inset:0; background:rgba(15,15,15,0.75); color:#888; font-weight:bold; letter-spacing:2px; justify-content:center; align-items:center; border-radius:4px; z-index:12; pointer-events:none;">OFFLINE</div>
+        </div>
+
+        <div class="meter-wrapper">
+            <div class="meter-bg">
+                <div class="meter-fill" id="smeter-fill"></div>
+            </div>
+            <div class="meter-text" id="smeter-text">S0</div>
+        </div>
+
+        <!-- IC-7300 Band & ATU Buttons -->
+        <div class="band-group" id="bands-ic7300" style="margin-bottom: 15px;">
+            <button onclick="vaihdaBandi(3.699, 'LSB')">80m</button>
+            <button onclick="vaihdaBandi(7.100, 'LSB')">40m</button>
+            <button onclick="vaihdaBandi(14.200, 'USB')">20m</button>
+            <button onclick="vaihdaBandi(21.200, 'USB')">15m</button>
+            <button onclick="vaihdaBandi(28.400, 'USB')">10m</button>
+            <button onclick="vaihdaBandi(50.100, 'USB')">6m</button>
+            <button onclick="viritaAntenni()" class="atu-btn">Tune ATU</button>
+        </div>
+
+        <!-- IC-9700 Band & Dual RX Buttons -->
+        <div id="bands-ic9700" style="display: none; margin-bottom: 15px;">
+            <div class="band-group" style="margin-bottom: 8px;">
+                <button onclick="vaihdaBandi(145.500, 'FM')">2m (144)</button>
+                <button onclick="vaihdaBandi(433.500, 'FM')">70cm (432)</button>
+                <button onclick="vaihdaBandi(1297.500, 'FM')">23cm (1296)</button>
+            </div>
+            <div class="band-group">
+                <button id="mob-main-btn" onclick="valitseIc9700Bandi('main')" style="background:#007bff;">MAIN VFO</button>
+                <button id="mob-sub-btn" onclick="valitseIc9700Bandi('sub')">SUB VFO</button>
+                <button id="mob-dual-btn" onclick="vaihdaIc9700DualRx()" style="background:#28a745;">DUAL RX: ON</button>
+                <button onclick="vaihdaIc9700Swap()">Swap M/S</button>
+            </div>
+        </div>
+
+        <button id="ptt-btn" onclick="togglePTT()" disabled>PTT (RX)</button>
+
+        <div class="control-group" style="background-color: #2c2c2c; padding: 10px; border-radius: 6px; margin-bottom: 20px;">
+            <label for="power-slider" style="color:#aaa; font-size:0.9rem; margin-right: 10px; white-space: nowrap;">RF Power:</label>
+            <input type="range" id="power-slider" min="0" max="100" value="100" style="flex: 1; cursor: pointer;" onchange="asetaTeho(this.value)">
+            <span id="power-val" style="color:#e0e0e0; min-width: 45px; text-align: right; font-family: monospace; font-size: 1.1rem;">100%</span>
+        </div>
+
+        <div class="section-label">Bookmarks</div>
+        <div class="band-group" id="memory-group" style="margin-bottom: 5px;"></div>
+        <div style="text-align: right; margin-bottom: 20px;">
+            <button onclick="tallennaMuistiin()" style="font-size: 0.8rem; padding: 5px 10px; width: auto; background-color: #28a745;">Bookmark Current</button>
+        </div>
+
+        <div class="control-group" style="margin-bottom: 20px;">
+            <input type="text" id="taajuus-input" placeholder="Enter frequency e.g. 14.200" style="text-align: center;">
+            <button onclick="asetaSuoraTaajuus()" style="width:80px;">Set</button>
+        </div>
+
+        <div class="audio-group">
+            <div id="audio-quick">
+                <button id="quick-audio-btn" onclick="toggleValitunRadionAudio()" class="success-btn" style="width: 100%; padding: 10px; font-weight: bold; font-size: 1.05rem;">Start Audio (IC-7300)</button>
+                <div style="display: flex; align-items: center; gap: 10px; margin-top: 10px;">
+                    <label style="margin: 0; min-width: auto; color: #aaa; font-size: 0.85rem;">Volume:</label>
+                    <input type="range" id="rx-vol-slider" min="0" max="100" value="100"
+                        style="flex: 1; cursor: pointer; padding: 0;" oninput="asetaRxVolyymi(this.value)">
+                    <span id="rx-vol-val"
+                        style="color:#e0e0e0; min-width: 40px; text-align: right; font-family: monospace; font-size: 0.9rem;">100%</span>
+                </div>
+                <a href="#" onclick="naytaAaniAsetukset()" style="display:block; text-align:center; margin-top:8px; color:#777; text-decoration:none; font-size:0.75rem;">Audio Device Settings</a>
+            </div>
+            
+            <div id="audio-selectors" style="display:none; flex-direction:column; gap:10px; margin-top: 10px;">
+                <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 6px;">
+                    <label style="color: #4da6ff; font-weight: bold; margin-bottom: 5px; display: block;">Server Audio Devices</label>
+                    <label>Radio RX Input:</label>
+                    <select id="pc-rx-source" style="margin-bottom: 5px;"></select>
+                    <label>Radio TX Output:</label>
+                    <select id="pc-tx-sink"></select>
+                </div>
+
+                <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 6px;">
+                    <label style="color: #28a745; font-weight: bold; margin-bottom: 5px; display: block;">Local Browser Audio</label>
+                    <label>Microphone (TX):</label>
+                    <select id="browser-mic-source" style="margin-bottom: 10px;"></select>
+                </div>
+                
+                <div style="display: flex; gap: 5px; margin-top: 5px;">
+                    <button class="fil-btn" onclick="piilotaAaniAsetukset()" style="flex:1;">Close</button>
+                    <button id="connect-audio-btn" onclick="tallennaAaniAsetukset()" class="success-btn"
+                        style="flex:2; transition: all 0.2s ease;">Save Devices</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let uiInitialized = false;
+        let valittuRadioId = localStorage.getItem('selectedRadioId') || '1';
+        let kaikkienRadioidenTilat = {};
+
+        function tarkistaKirjautuminen() {
+            const expiry = localStorage.getItem('loginExpiry');
+            if (expiry && Date.now() < parseInt(expiry)) {
+                localStorage.setItem('loginExpiry', Date.now() + 3600000);
+                aloitaRadio();
+            } else {
+                document.getElementById('login-overlay').style.display = 'flex';
+                document.getElementById('radio-ui').style.display = 'none';
+                
+                const pinInput = document.getElementById('login-pin');
+                pinInput.focus();
+                pinInput.onkeypress = (e) => { if (e.key === 'Enter') kirjauduSisaan(); };
+            }
+        }
+
+        function kirjauduSisaan() {
+            const koodi = document.getElementById('login-pin').value;
+            if (koodi === "7300") {
+                localStorage.setItem('loginExpiry', Date.now() + 3600000);
+                aloitaRadio();
+            } else {
+                const err = document.getElementById('login-err');
+                err.style.display = 'block';
+                document.getElementById('login-pin').value = "";
+                setTimeout(() => err.style.display = 'none', 2000);
+            }
+        }
+
+        function paivitaRadioTabit() {
+            const b1 = document.getElementById('radio-btn-1');
+            const b2 = document.getElementById('radio-btn-2');
+            if (b1 && b2) {
+                if (valittuRadioId === '2') {
+                    b1.classList.remove('active');
+                    b2.classList.add('active');
+                } else {
+                    b2.classList.remove('active');
+                    b1.classList.add('active');
+                }
+            }
+        }
+
+        function aloitaRadio() {
+            document.getElementById('login-overlay').style.display = 'none';
+            document.getElementById('radio-ui').style.display = 'block';
+            paivitaRadioTabit();
+            paivitaAudioPainikkeet();
+            if (!uiInitialized) {
+                initRadio();
+                uiInitialized = true;
+            }
+        }
+
+        window.onload = tarkistaKirjautuminen;
+
+        let ws = null;
+        let canvas = null;
+        let ctx = null;
+        let divisionData = new Array(11).fill([]);
+        let vesiputousOffset = 0;
+
+        let nykyinenVesiputousRivi = null;
+        let tavoiteVesiputousRivi = null;
+        let viimeisinScopeAika = 0;
+
+        function syotaVesiputousData(uusiRivi) {
+            if (!uusiRivi || uusiRivi.length < 100) return;
+            viimeisinScopeAika = performance.now();
+            if (!nykyinenVesiputousRivi || nykyinenVesiputousRivi.length !== uusiRivi.length) {
+                nykyinenVesiputousRivi = Float32Array.from(uusiRivi);
+                tavoiteVesiputousRivi = Float32Array.from(uusiRivi);
+                return;
+            }
+            for (let k = 0; k < uusiRivi.length; k++) {
+                tavoiteVesiputousRivi[k] = uusiRivi[k];
+            }
+        }
+
+        function vaihdaValittuaRadiota(uusiId) {
+            valittuRadioId = String(uusiId);
+            localStorage.setItem('selectedRadioId', valittuRadioId);
+            paivitaRadioTabit();
+            nykyinenVesiputousRivi = null;
+            tavoiteVesiputousRivi = null;
+            if (ctx && canvas) {
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+            lataaMuistit();
+            if (kaikkienRadioidenTilat[valittuRadioId]) {
+                paivitaValitunRadionUI(kaikkienRadioidenTilat[valittuRadioId]);
+            }
+            paivitaAudioPainikkeet();
+        }
+
+        function vaihdaRadionVirta() {
+            const cur = kaikkienRadioidenTilat[valittuRadioId];
+            const wantOn = !(cur && cur.online);
+            if (!wantOn && cur) {
+                cur.online = false;
+                paivitaValitunRadionUI(cur);
+            }
+            fetch('/api/cmd', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({radio_id: valittuRadioId, type: 'radio_power', power: wantOn})
+            });
+        }
+
+        function paivitaDropdownOtsikot(allStates) {
+            if (!allStates) return;
+            ['1', '2'].forEach(id => {
+                const st = allStates[id];
+                const lbl = document.getElementById('radio-btn-lbl-' + id);
+                const dot = document.getElementById('radio-btn-dot-' + id);
+                if (st && lbl && dot) {
+                    const modelTxt = st.model || (id === '2' ? 'IC-9700' : 'IC-7300');
+                    lbl.textContent = modelTxt;
+                    dot.style.background = st.online ? '#28a745' : '#666';
+                }
+            });
+            paivitaAudioPainikkeet();
+        }
+
+        function paivitaValitunRadionUI(data) {
+            if (!data) return;
+            const onlineEl = document.getElementById('online-status');
+            const wfOff = document.getElementById('wf-offline');
+            const pwrBtn = document.getElementById('mob-pwr-btn');
+            if (data.online) {
+                onlineEl.innerText = 'ONLINE';
+                onlineEl.style.color = '#28a745';
+                wfOff.style.display = 'none';
+                if (pwrBtn) {
+                    pwrBtn.innerText = 'Power OFF';
+                    pwrBtn.style.backgroundColor = '#3f2e1e';
+                    pwrBtn.style.borderColor = '#d97706';
+                }
+            } else {
+                onlineEl.innerText = 'OFFLINE';
+                onlineEl.style.color = '#888';
+                wfOff.style.display = 'flex';
+                if (pwrBtn) {
+                    pwrBtn.innerText = 'Power ON';
+                    pwrBtn.style.backgroundColor = '#1e3a8a';
+                    pwrBtn.style.borderColor = '#3b82f6';
+                }
+            }
+
+            const is9700 = !!(data.model && data.model.includes('9700'));
+            document.getElementById('bands-ic7300').style.display = is9700 ? 'none' : 'flex';
+            document.getElementById('bands-ic9700').style.display = is9700 ? 'block' : 'none';
+            if (is9700) {
+                const subAct = (data.active_band === 1);
+                document.getElementById('mob-main-btn').style.background = !subAct ? '#007bff' : '#333';
+                document.getElementById('mob-sub-btn').style.background = subAct ? '#007bff' : '#333';
+                const dualBtn = document.getElementById('mob-dual-btn');
+                dualBtn.innerText = data.dual_rx ? 'DUAL RX: ON' : 'SINGLE RX';
+                dualBtn.style.background = data.dual_rx ? '#28a745' : '#444';
+            }
+
+            if (!taajuusLukko && nykyinenTaajuusHz !== data.taajuus_hz) {
+                nykyinenTaajuusHz = data.taajuus_hz;
+                renderFrequency(nykyinenTaajuusHz);
+            }
+            if (!modeLukko && data.mode) {
+                document.getElementById('mode-text').innerText = data.mode;
+            }
+            if (typeof data.power_pct === 'number' && Date.now() >= tehoLukkoAsti) {
+                const pwrSlider = document.getElementById('power-slider');
+                const pwrVal = document.getElementById('power-val');
+                if (pwrSlider) pwrSlider.value = data.power_pct;
+                if (pwrVal) pwrVal.innerText = data.power_pct + '%';
+            }
+            
+            let sStr = data.online ? (data.smeter || "S0") : "S0";
+            document.getElementById('smeter-text').innerText = sStr;
+            let w = 0;
+            if (data.online) {
+                if (typeof data.smeter_pct === 'number') {
+                    w = data.smeter_pct;
+                } else if (sStr.includes('+')) {
+                    w = 60 + (parseInt(sStr.split('+')[1]) / 60 * 40);
+                } else {
+                    w = parseInt(sStr.replace('S','')) * 6.67;
+                }
+            }
+            const fillEl = document.getElementById('smeter-fill');
+            fillEl.style.width = Math.min(100, Math.max(0, w)) + '%';
+            fillEl.style.backgroundColor = sStr.includes('+') ? '#ff4d4d' : '#4da6ff';
+        }
+
+        function valitseIc9700Bandi(band) {
+            fetch('/api/cmd', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({radio_id: valittuRadioId, type: 'select_band', band: band})
+            });
+        }
+
+        function vaihdaIc9700DualRx() {
+            const cur = (kaikkienRadioidenTilat[valittuRadioId] && kaikkienRadioidenTilat[valittuRadioId].dual_rx) ? 1 : 0;
+            fetch('/api/cmd', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({radio_id: valittuRadioId, type: 'dual_rx', dual_rx: cur ? 0 : 1})
+            });
+        }
+
+        function vaihdaIc9700Swap() {
+            fetch('/api/cmd', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({radio_id: valittuRadioId, type: 'swap_bands'})
+            });
+        }
+
+        function initRadio() {
+            lataaMuistit();
+            
+            canvas = document.getElementById('waterfall');
+            ctx = canvas.getContext('2d', { alpha: false });
+            
+            const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+            ws = new WebSocket(protocol + location.host + '/ws');
+            ws.onmessage = (e) => {
+                const msg = JSON.parse(e.data);
+                if (msg.type === 'tila') {
+                    if (msg.all_states) {
+                        kaikkienRadioidenTilat = msg.all_states;
+                        paivitaDropdownOtsikot(msg.all_states);
+                    }
+                    const targetRid = String(msg.radio_id || '1');
+                    if (msg.state) {
+                        kaikkienRadioidenTilat[targetRid] = msg.state;
+                    }
+                    const currentData = kaikkienRadioidenTilat[valittuRadioId] || (targetRid === valittuRadioId ? msg.state : null);
+                    if (currentData) {
+                        paivitaValitunRadionUI(currentData);
+                    }
+                }
+                else if (msg.type === 'scope_row' || msg.type === 'scope') {
+                    const msgRid = String(msg.radio_id || '1');
+                    if (msgRid !== valittuRadioId) return;
+                    if (msg.data && msg.data.length > 100) {
+                        syotaVesiputousData(msg.data);
+                        return;
+                    }
+                    let bcd = msg.div;
+                    let realDiv = Math.floor(bcd / 16) * 10 + (bcd % 16);
+                    if (realDiv >= 1 && realDiv <= 11) {
+                        divisionData[realDiv - 1] = msg.data;
+                    }
+                    if (realDiv === 11) {
+                        let yhtenainenKuva = [];
+                        for (let k = 0; k < 11; k++) {
+                            yhtenainenKuva.push(...divisionData[k]);
+                        }
+                        syotaVesiputousData(yhtenainenKuva);
+                    }
+                }
+            };
+
+            let edellinenPiirto = 0;
+            const FRAME_MS = 33.3;
+            function animoiVesiputous(now) {
+                requestAnimationFrame(animoiVesiputous);
+                if (!nykyinenVesiputousRivi || !tavoiteVesiputousRivi) return;
+                if (now - viimeisinScopeAika > 1500) return;
+                if (now - edellinenPiirto < FRAME_MS) return;
+                edellinenPiirto = now;
+
+                const len = tavoiteVesiputousRivi.length;
+                for (let k = 0; k < len; k++) {
+                    const target = tavoiteVesiputousRivi[k];
+                    const curr = nykyinenVesiputousRivi[k] + (target - nykyinenVesiputousRivi[k]) * 0.35;
+                    const jitter = (curr > 2 && curr < 60) ? ((Math.random() - 0.5) * 2.5) : 0;
+                    nykyinenVesiputousRivi[k] = curr + jitter;
+                }
+                piirraVesiputousRivi(nykyinenVesiputousRivi);
+            }
+            requestAnimationFrame(animoiVesiputous);
+
+            setInterval(() => {
+                const d = new Date();
+                document.getElementById('clock-local').innerText = d.toLocaleTimeString('fi-FI');
+                document.getElementById('clock-utc').innerText = d.toISOString().substring(11, 19) + ' Z';
+            }, 1000);
+        }
+        
+        const lut = new Uint8ClampedArray(161 * 4);
+        for(let i=0; i<=160; i++) {
+            let r=0, g=0, b=0;
+            if (i < 30) {
+                b = i * 2;
+            } else if (i < 65) {
+                b = 60 + ((i-30)*3);
+                g = (i-30)*1.5;
+            } else if (i < 100) {
+                b = Math.max(0, 165 - ((i-65)*4));
+                g = Math.min(255, 52 + ((i-65)*5));
+            } else if (i < 135) {
+                r = Math.min(255, (i-100)*7);
+                g = 227;
+            } else {
+                r = 255;
+                g = Math.max(0, 227 - ((i-135)*15));
+            }
+            lut[i*4+0] = Math.min(255, Math.max(0, Math.floor(r)));
+            lut[i*4+1] = Math.min(255, Math.max(0, Math.floor(g)));
+            lut[i*4+2] = Math.min(255, Math.max(0, Math.floor(b)));
+            lut[i*4+3] = 255;
+        }
+
+        function piirraVesiputousRivi(points) {
+            if (!ctx || points.length < 100) return;
+            const w = canvas.width;
+            const h = canvas.height;
+            ctx.drawImage(canvas, 0, 0, w, h-1, 0, 1, w, h-1);
+            
+            const idata = ctx.createImageData(w, 1);
+            const pLen = points.length; 
+            const ratio = pLen / w;
+            
+            for(let x=0; x<w; x++) {
+                const pIdx = Math.floor((x + vesiputousOffset) * ratio);
+                const val = (pIdx >= 0 && pIdx < pLen) ? (points[pIdx] || 0) : 0; 
+                const i = Math.min(160, Math.max(0, parseInt(val)));
+                idata.data[x*4] = lut[i*4];
+                idata.data[x*4+1] = lut[i*4+1];
+                idata.data[x*4+2] = lut[i*4+2];
+                idata.data[x*4+3] = 255;
+            }
+            ctx.putImageData(idata, 0, 0);
+        }
+
+        let nykyinenTaajuusHz = 0;
+        let pttActive = false;
+        let tilaKyselyKaynnissa = false;
+        let taajuusLukko = false;
+        let lukkoAjastin = null;
+        let rullaAjastin = null;
+
+        const MODES = ["LSB", "USB", "FM", "AM", "CW", "RTTY", "LSB-D", "USB-D", "FM-D"];
+        let modeLukko = false;
+        let modeLukkoAjastin = null;
+
+        const rawAudioConstraints = {
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false,
+            channelCount: 1
+        };
+
+        function renderFrequency(hz) {
+            let displayStr = Math.floor(hz / 10).toString().padStart(hz >= 100000000 ? 8 : 7, '0');
+            const container = document.getElementById('freq-text');
+            let html = '';
+            let place = 10;
+            let partCount = 0;
+
+            for (let i = displayStr.length - 1; i >= 0; i--) {
+                const num = displayStr[i];
+                const oldDigit = container.querySelector(`.digit[data-place="${place}"]`);
+                const animationClass = (oldDigit && oldDigit.innerText !== num) ? 'changed' : '';
+                html = `<span class="digit ${animationClass}" data-place="${place}">${num}</span>` + html;
+                place *= 10;
+                partCount++;
+                if ((partCount === 2 || partCount === 5) && i > 0) html = `<span class="dot">.</span>` + html;
+            }
+            container.innerHTML = html;
+        }
+
+        document.getElementById('freq-text').addEventListener('wheel', function (e) {
+            const digitSpan = e.target.closest('.digit');
+            if (digitSpan) {
+                e.preventDefault();
+                digitSpan.style.cursor = e.deltaY < 0 ? 'n-resize' : 's-resize';
+                let uusiHz = nykyinenTaajuusHz + (e.deltaY < 0 ? 1 : -1) * parseInt(digitSpan.getAttribute('data-place'));
+                if (uusiHz >= 30000 && uusiHz <= 1300000000) {
+                    nykyinenTaajuusHz = uusiHz;
+                    renderFrequency(nykyinenTaajuusHz);
+                    taajuusLukko = true;
+                    clearTimeout(lukkoAjastin);
+                    lukkoAjastin = setTimeout(() => { taajuusLukko = false; }, 1000);
+                    clearTimeout(rullaAjastin);
+                    rullaAjastin = setTimeout(() => { lahetaTaajuus(nykyinenTaajuusHz); }, 100);
+                }
+            }
+        }, { passive: false });
+
+        async function pyydaLuvat() {
+            try {
+                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    stream.getTracks().forEach(t => t.stop());
+                } else {
+                    alert("Browser blocked microphone access: Please ensure HTTPS is enabled.");
+                    return false;
+                }
+
+                const res = await fetch('/api/audio_devices');
+                const pcDeves = await res.json();
+                
+                const fillPc = (id, list, savedVal) => {
+                    const el = document.getElementById(id);
+                    el.innerHTML = '';
+                    let found = false;
+                    list.forEach(d => {
+                        const o = document.createElement('option');
+                        o.value = d.id; o.text = d.label; 
+                        el.appendChild(o);
+                        if (savedVal && d.id === savedVal) found = true;
+                    });
+                    if (found) el.value = savedVal;
+                };
+                
+                fillPc('pc-rx-source', pcDeves.inputs, localStorage.getItem('pcRxSource_' + valittuRadioId) || localStorage.getItem('pcRxSource'));
+                fillPc('pc-tx-sink', pcDeves.outputs, localStorage.getItem('pcTxSink_' + valittuRadioId) || localStorage.getItem('pcTxSink'));
+
+                const bDevices = await navigator.mediaDevices.enumerateDevices();
+                const bMics = bDevices.filter(d => d.kind === 'audioinput');
+                const savedBrowserMic = localStorage.getItem('browserMic');
+                
+                const elBrowser = document.getElementById('browser-mic-source');
+                elBrowser.innerHTML = '';
+                let foundB = false;
+                bMics.forEach(d => {
+                    const o = document.createElement('option');
+                    o.value = d.deviceId; o.text = d.label || 'Default Microphone';
+                    elBrowser.appendChild(o);
+                    if (savedBrowserMic && d.deviceId === savedBrowserMic) foundB = true;
+                });
+                if (foundB) elBrowser.value = savedBrowserMic;
+
+                const savedVol = localStorage.getItem('rxVol');
+                if (savedVol) {
+                    document.getElementById('rx-vol-slider').value = savedVol;
+                    asetaRxVolyymi(savedVol);
+                }
+                return true;
+            } catch (err) { alert("Failed to fetch audio devices: " + err); return false; }
+        }
+
+        function naytaAaniAsetukset() {
+            pyydaLuvat().then(ok => {
+                if (ok) {
+                    document.getElementById('audio-quick').style.display = 'none';
+                    document.getElementById('audio-selectors').style.display = 'flex';
+                }
+            });
+        }
+        
+        function piilotaAaniAsetukset() {
+            document.getElementById('audio-quick').style.display = 'block';
+            document.getElementById('audio-selectors').style.display = 'none';
+        }
+
+        let sharedAudioCtx = null;
+        let rxMasterGain = null;
+        let pcmMicStream = null;
+        let pcmMicProcessor = null;
+        let micInitialized = false;
+
+        const radioAudio = {
+            '1': { active: false, ws: null, nextTime: 0, gainNode: null },
+            '2': { active: false, ws: null, nextTime: 0, gainNode: null }
+        };
+
+        function getSharedAudioContext() {
+            if (!sharedAudioCtx || sharedAudioCtx.state === 'closed') {
+                const AudioCtx = window.AudioContext || window.webkitAudioContext;
+                sharedAudioCtx = new AudioCtx();
+                rxMasterGain = sharedAudioCtx.createGain();
+                rxMasterGain.connect(sharedAudioCtx.destination);
+                const savedVol = localStorage.getItem('rxVol') || 100;
+                rxMasterGain.gain.value = parseFloat(savedVol) / 100.0;
+            }
+            if (sharedAudioCtx.state === 'suspended') {
+                sharedAudioCtx.resume();
+            }
+            return sharedAudioCtx;
+        }
+
+        function asetaRxVolyymi(val) {
+            getSharedAudioContext();
+            if (rxMasterGain) {
+                rxMasterGain.gain.value = parseFloat(val) / 100.0;
+            }
+            document.getElementById('rx-vol-val').innerText = val + '%';
+            localStorage.setItem('rxVol', val);
+        }
+
+        function paivitaAudioPainikkeet() {
+            const btn = document.getElementById('quick-audio-btn');
+            if (!btn) return;
+            const rid = valittuRadioId;
+            const modelName = (kaikkienRadioidenTilat[rid] && kaikkienRadioidenTilat[rid].model) || (rid === '2' ? 'IC-9700' : 'IC-7300');
+            const isActive = !!(radioAudio[rid] && radioAudio[rid].active);
+
+            if (isActive) {
+                btn.innerText = `Stop Audio (${modelName})`;
+                btn.className = "";
+                btn.style.backgroundColor = "#dc3545";
+            } else {
+                btn.innerText = `Start Audio (${modelName})`;
+                btn.className = "success-btn";
+                btn.style.backgroundColor = "#28a745";
+            }
+
+            ['1', '2'].forEach(id => {
+                const spkEl = document.getElementById('radio-btn-spk-' + id);
+                if (spkEl) {
+                    spkEl.style.display = (radioAudio[id] && radioAudio[id].active) ? 'inline' : 'none';
+                }
+            });
+
+            const pttBtn = document.getElementById('ptt-btn');
+            if (pttBtn) {
+                pttBtn.disabled = !isActive;
+            }
+        }
+
+        async function toggleValitunRadionAudio() {
+            const rid = valittuRadioId;
+            if (radioAudio[rid] && radioAudio[rid].active) {
+                await stopRadioAudio(rid);
+            } else {
+                await startRadioAudio(rid);
+            }
+            paivitaAudioPainikkeet();
+        }
+
+        async function stopRadioAudio(rid) {
+            const r = radioAudio[rid];
+            if (!r) return;
+            try {
+                fetch('/api/audio_stop', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ radio_id: rid })
+                });
+            } catch (e) {}
+
+            if (r.ws) {
+                try { r.ws.close(); } catch (e) {}
+                r.ws = null;
+            }
+            r.active = false;
+            r.nextTime = 0;
+            paivitaAudioPainikkeet();
+        }
+
+        async function initBrowserMic(actx) {
+            if (micInitialized) return;
+            const bMic = localStorage.getItem('browserMic');
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    deviceId: bMic ? { exact: bMic } : undefined,
+                    echoCancellation: true,
+                    noiseSuppression: false,
+                    autoGainControl: true,
+                    channelCount: 1
+                }
+            });
+            pcmMicStream = actx.createMediaStreamSource(stream);
+            pcmMicProcessor = actx.createScriptProcessor(2048, 1, 1);
+            
+            const pcmZeroGain = actx.createGain();
+            pcmZeroGain.gain.value = 0;
+            
+            pcmMicStream.connect(pcmMicProcessor);
+            pcmMicProcessor.connect(pcmZeroGain);
+            pcmZeroGain.connect(actx.destination);
+
+            pcmMicProcessor.onaudioprocess = (e) => {
+                if (!pttActive) return;
+                const activeWs = radioAudio[valittuRadioId] && radioAudio[valittuRadioId].ws;
+                if (!activeWs || activeWs.readyState !== WebSocket.OPEN) return;
+                const inputData = e.inputBuffer.getChannelData(0);
+                activeWs.send(inputData.buffer);
+            };
+            micInitialized = true;
+        }
+
+        async function startRadioAudio(rid) {
+            const actx = getSharedAudioContext();
+            
+            if (!micInitialized) {
+                try {
+                    await initBrowserMic(actx);
+                } catch (e) {
+                    console.warn("Mic init:", e);
+                }
+            }
+
+            try {
+                const pcRx = localStorage.getItem('pcRxSource_' + rid);
+                const pcTx = localStorage.getItem('pcTxSink_' + rid);
+                const reqBody = { radio_id: rid, local: false };
+                if (pcRx) reqBody.rx = pcRx;
+                if (pcTx) reqBody.tx = pcTx;
+
+                await fetch('/api/audio_start', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(reqBody)
+                });
+            } catch (err) {
+                alert("Failed to start server audio: " + err);
+                return;
+            }
+
+            const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+            const wsUrl = `${protocol}${location.host}/ws_audio?radio=${rid}&sample_rate=${actx.sampleRate}`;
+            const ws = new WebSocket(wsUrl);
+            ws.binaryType = "arraybuffer";
+
+            const gain = actx.createGain();
+            gain.connect(rxMasterGain);
+
+            radioAudio[rid] = {
+                active: true,
+                ws: ws,
+                gainNode: gain,
+                nextTime: 0
+            };
+
+            ws.onmessage = (event) => {
+                if (pttActive && valittuRadioId === rid) return;
+
+                const floats = new Float32Array(event.data);
+                const buffer = actx.createBuffer(1, floats.length, 16000);
+                buffer.getChannelData(0).set(floats);
+
+                const source = actx.createBufferSource();
+                source.buffer = buffer;
+                source.connect(gain);
+
+                const cur = actx.currentTime;
+                let nt = radioAudio[rid].nextTime;
+                if (nt < cur) {
+                    nt = cur + 0.03;
+                } else if (nt > cur + 0.12) {
+                    nt = cur + 0.03;
+                }
+                source.start(nt);
+                radioAudio[rid].nextTime = nt + buffer.duration;
+            };
+
+            ws.onclose = () => {
+                if (radioAudio[rid] && radioAudio[rid].ws === ws) {
+                    radioAudio[rid].active = false;
+                    radioAudio[rid].ws = null;
+                    paivitaAudioPainikkeet();
+                }
+            };
+
+            paivitaAudioPainikkeet();
+        }
+
+        async function tallennaAaniAsetukset() {
+            const pcRx = document.getElementById('pc-rx-source').value;
+            const pcTx = document.getElementById('pc-tx-sink').value;
+            const bMic = document.getElementById('browser-mic-source').value;
+            
+            localStorage.setItem('pcRxSource_' + valittuRadioId, pcRx);
+            localStorage.setItem('pcTxSink_' + valittuRadioId, pcTx);
+            localStorage.setItem('browserMic', bMic);
+            
+            if (radioAudio[valittuRadioId] && radioAudio[valittuRadioId].active) {
+                await fetch('/api/audio_start', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ radio_id: valittuRadioId, rx: pcRx, tx: pcTx })
+                });
+            }
+            piilotaAaniAsetukset();
+        }
+
+        async function runCmd(payload) {
+            payload.radio_id = valittuRadioId;
+            await fetch('/api/cmd', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        }
+
+        async function togglePTT() {
+            const btn = document.getElementById('ptt-btn');
+            pttActive = !btn.classList.contains('tx-active');
+            
+            const actx = getSharedAudioContext();
+            if (pttActive && !micInitialized) {
+                try {
+                    await initBrowserMic(actx);
+                } catch (e) {
+                    alert("Could not access microphone: " + e);
+                    pttActive = false;
+                    return;
+                }
+            }
+
+            await runCmd({ type: 'ptt', ptt: pttActive ? 1 : 0 });
+            btn.classList.toggle('tx-active', pttActive);
+            btn.innerText = pttActive ? "TX ACTIVE" : "PTT (RX)";
+        }
+
+        async function lahetaTaajuus(hz) {
+            await runCmd({ type: 'taajuus', hz: hz });
+        }
+
+        function muutaTaajuutta(s) {
+            nykyinenTaajuusHz += (parseInt(document.getElementById('step-select').value) * s);
+            renderFrequency(nykyinenTaajuusHz);
+            taajuusLukko = true; clearTimeout(lukkoAjastin); lukkoAjastin = setTimeout(() => { taajuusLukko = false; }, 1000);
+            lahetaTaajuus(nykyinenTaajuusHz);
+        }
+
+        function asetaSuoraTaajuus() {
+            const v = document.getElementById('taajuus-input').value.replace(',', '.');
+            if (v) { nykyinenTaajuusHz = Math.round(parseFloat(v) * 1000000); renderFrequency(nykyinenTaajuusHz); lahetaTaajuus(nykyinenTaajuusHz); }
+        }
+
+        function avaaModeValikko() { document.getElementById('mode-popup').style.display = 'flex'; }
+        function suljeModeValikko() { document.getElementById('mode-popup').style.display = 'none'; }
+
+        async function valitseMode(mode) {
+            suljeModeValikko();
+            document.getElementById('mode-text').innerText = mode;
+
+            modeLukko = true;
+            clearTimeout(modeLukkoAjastin);
+            modeLukkoAjastin = setTimeout(() => { modeLukko = false; }, 1000);
+
+            await runCmd({ type: 'mode', mode: mode, filter: 1 });
+        }
+
+        async function vaihdaBandi(mhz, mode) {
+            nykyinenTaajuusHz = Math.round(mhz * 1000000);
+            renderFrequency(nykyinenTaajuusHz);
+            await lahetaTaajuus(nykyinenTaajuusHz);
+
+            await runCmd({ type: 'mode', mode: mode, filter: 1 });
+        }
+
+        async function vaihdaFiltteri(nro) {
+            const currentMode = document.getElementById('mode-text').innerText;
+            await runCmd({ type: 'mode', mode: currentMode, filter: nro });
+        }
+
+        let tehoLukkoAsti = 0;
+
+        async function asetaTeho(val) {
+            tehoLukkoAsti = Date.now() + 600;
+            document.getElementById('power-val').innerText = val + '%';
+            const tehoFloat = parseInt(val) / 100.0;
+            await runCmd({ type: 'teho', teho: tehoFloat });
+        }
+
+        async function viritaAntenni() {
+            await runCmd({ type: 'atu' });
+        }
+
+        function poistaMuisti(idx) {
+            const key = 'radio_memories_' + valittuRadioId;
+            let mems = JSON.parse(localStorage.getItem(key) || localStorage.getItem('radio_memories') || '[]');
+            mems.splice(idx, 1);
+            localStorage.setItem(key, JSON.stringify(mems));
+            lataaMuistit();
+        }
+
+        function lataaMuistit() {
+            const key = 'radio_memories_' + valittuRadioId;
+            const mems = JSON.parse(localStorage.getItem(key) || (valittuRadioId === '1' ? localStorage.getItem('radio_memories') : '[]') || '[]');
+            const container = document.getElementById('memory-group');
+            container.innerHTML = '';
+            mems.forEach((m, idx) => {
+                const wrap = document.createElement('div');
+                wrap.className = 'mem-wrap';
+
+                const btn = document.createElement('button');
+                btn.innerText = `${(m.hz / 1000000).toFixed(3)} ${m.mode}`;
+                btn.onclick = () => vaihdaBandi(m.hz / 1000000, m.mode);
+
+                const delBtn = document.createElement('button');
+                delBtn.className = 'mem-del';
+                delBtn.innerHTML = '&times;';
+                delBtn.title = 'Delete';
+                delBtn.onclick = (e) => { e.stopPropagation(); poistaMuisti(idx); };
+
+                wrap.appendChild(btn);
+                wrap.appendChild(delBtn);
+                container.appendChild(wrap);
+            });
+            if (mems.length === 0) {
+                container.innerHTML = '<span style="color:#888; font-size: 0.8rem; width: 100%; text-align: left;">No saved bookmarks</span>';
+            }
+        }
+
+        function tallennaMuistiin() {
+            const key = 'radio_memories_' + valittuRadioId;
+            const mems = JSON.parse(localStorage.getItem(key) || '[]');
+            const currentMode = document.getElementById('mode-text').innerText;
+            mems.push({ hz: nykyinenTaajuusHz, mode: currentMode });
+            localStorage.setItem(key, JSON.stringify(mems));
+            lataaMuistit();
+        }
+    </script>
+</body>
+
+</html>

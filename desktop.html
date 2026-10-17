@@ -1,0 +1,3525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Icom Remote Control</title>
+    <style>
+        :root {
+            --bg-main: #121215;
+            --bg-panel: #1a1a1f;
+            --bg-card: #222228;
+            --bg-input: #141418;
+            --border: #2e2e38;
+            --border-light: #3e3e4a;
+            --accent: #3b82f6;
+            --green: #16a34a;
+            --red: #dc2626;
+            --amber: #d97706;
+            --text: #f4f4f5;
+            --text-muted: #a1a1aa;
+            --text-dim: #71717a;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background-color: var(--bg-main);
+            color: var(--text);
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Top Bar */
+        .topbar {
+            height: 34px;
+            min-height: 34px;
+            background: var(--bg-panel);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 14px;
+            font-size: 12px;
+            color: var(--text-muted);
+            gap: 12px;
+        }
+        .topbar-left, .topbar-center, .topbar-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .topbar-title {
+            font-weight: 600;
+            color: var(--text);
+        }
+        .topbar code {
+            color: var(--text);
+            background: var(--bg-card);
+            padding: 2px 6px;
+            border-radius: 3px;
+            border: 1px solid var(--border);
+            font-family: 'Consolas', monospace;
+        }
+        .view-btn {
+            background: var(--bg-card);
+            color: var(--text-muted);
+            border: 1px solid var(--border-light);
+            border-radius: 4px;
+            padding: 2px 10px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .view-btn:hover {
+            color: var(--text);
+            border-color: #52525b;
+        }
+        .view-btn.active {
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
+        }
+
+        /* Main Grid (2 columns when both visible, 1 column when one is hidden) */
+        .dual-cockpit {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: minmax(0, 1fr);
+            gap: 6px;
+            padding: 6px;
+            height: calc(100vh - 34px);
+            min-height: 0;
+            overflow: hidden;
+        }
+        .dual-cockpit.single-view {
+            grid-template-columns: 1fr;
+        }
+
+        .radio-deck {
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            padding: 6px 8px;
+            height: 100%;
+            min-height: 0;
+            min-width: 0;
+            overflow: hidden;
+        }
+        .radio-deck.hidden-deck {
+            display: none !important;
+        }
+        .radio-deck.tx-deck {
+            border-color: var(--red);
+        }
+
+        /* Row 1: Header, Filters, Connection & Power */
+        .deck-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 4px 8px;
+            min-height: 36px;
+            flex-wrap: wrap;
+            flex-shrink: 0;
+        }
+        .deck-title-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .deck-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text);
+            letter-spacing: 0.2px;
+        }
+        .status-badge {
+            font-size: 10.5px;
+            font-weight: 600;
+            padding: 2px 7px;
+            border-radius: 3px;
+            text-transform: uppercase;
+        }
+        .status-badge.online {
+            background: rgba(22, 163, 74, 0.2);
+            color: #4ade80;
+            border: 1px solid rgba(22, 163, 74, 0.45);
+        }
+        .status-badge.standby {
+            background: rgba(217, 119, 6, 0.2);
+            color: #fbbf24;
+            border: 1px solid rgba(217, 119, 6, 0.45);
+        }
+        .status-badge.offline {
+            background: #27272a;
+            color: var(--text-muted);
+            border: 1px solid var(--border-light);
+        }
+
+        .header-filters {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            margin-left: 4px;
+        }
+
+        .conn-controls {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            flex-wrap: wrap;
+        }
+        select, input[type="number"] {
+            background: var(--bg-input);
+            color: var(--text);
+            border: 1px solid var(--border-light);
+            border-radius: 4px;
+            padding: 3px 6px;
+            font-size: 11px;
+            outline: none;
+        }
+        select:focus {
+            border-color: var(--accent);
+        }
+        .btn {
+            background: #2d2d36;
+            color: var(--text);
+            border: 1px solid var(--border-light);
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .btn:hover {
+            background: #383844;
+        }
+        .btn-start {
+            background: var(--green);
+            border-color: #22c55e;
+            color: #fff;
+        }
+        .btn-start:hover {
+            background: #15803d;
+        }
+        .btn-stop {
+            background: var(--red);
+            border-color: #ef4444;
+            color: #fff;
+        }
+        .btn-stop:hover {
+            background: #b91c1c;
+        }
+        .btn-pwr-on {
+            background: #1e3a8a;
+            border-color: #3b82f6;
+            color: #eff6ff;
+        }
+        .btn-pwr-on:hover {
+            background: #1d4ed8;
+        }
+        .btn-pwr-off {
+            background: #3f2e1e;
+            border-color: #d97706;
+            color: #fef3c7;
+        }
+        .btn-pwr-off:hover {
+            background: #92400e;
+        }
+
+        /* Row 2: VFO & Meter Dashboard */
+        .dashboard-row {
+            display: grid;
+            grid-template-columns: 1.25fr 1fr;
+            gap: 6px;
+            min-height: 82px;
+            flex-shrink: 0;
+        }
+        .dashboard-row.ic9700-dash {
+            grid-template-columns: 1.36fr 1.04fr;
+        }
+
+        .vfo-card {
+            background: var(--bg-input);
+            border: 1px solid var(--border-light);
+            border-radius: 4px;
+            padding: 6px 10px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        .vfo-top-meta {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+        .vfo-tag {
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+        .vfo-mode-pill {
+            background: var(--bg-card);
+            color: var(--text);
+            border: 1px solid var(--border-light);
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-weight: 600;
+            font-size: 10.5px;
+        }
+
+        /* Scrollable VFO Digits */
+        .vfo-digits {
+            display: flex;
+            align-items: baseline;
+            justify-content: center;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            margin: 2px 0;
+        }
+        .vfo-digit {
+            display: inline-block;
+            font-size: 32px;
+            line-height: 1.05;
+            padding: 1px 2px;
+            border-radius: 3px;
+            color: var(--text);
+            cursor: ns-resize;
+        }
+        .vfo-digit.leading-zero {
+            color: #3f3f46;
+        }
+        .vfo-digit:hover {
+            background: var(--accent);
+            color: #fff;
+        }
+        .vfo-sep {
+            font-size: 24px;
+            color: var(--text-dim);
+            margin: 0 1px;
+        }
+        .vfo-unit {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-left: 5px;
+            font-weight: 600;
+        }
+
+        /* IC-9700 Dual VFO (MAIN + SUB) */
+        .dual-vfo-container {
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            gap: 5px;
+            align-items: stretch;
+        }
+        .sub-vfo-card {
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 5px 8px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            cursor: pointer;
+        }
+        .sub-vfo-card.active-band-card {
+            border-color: var(--accent);
+            background: #171920;
+        }
+        .sub-vfo-card.inactive-sub {
+            opacity: 0.45;
+        }
+        .sub-vfo-card .vfo-digit {
+            font-size: 21px;
+            padding: 1px 1px;
+        }
+        .sub-vfo-card .vfo-sep {
+            font-size: 17px;
+        }
+        .vfo-mini-bands {
+            display: flex;
+            gap: 3px;
+        }
+        .vfo-mini-btn {
+            background: var(--bg-card);
+            color: var(--text-muted);
+            border: 1px solid var(--border-light);
+            border-radius: 3px;
+            padding: 1px 5px;
+            font-size: 10px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .vfo-mini-btn:hover {
+            color: var(--text);
+        }
+        .vfo-mini-btn.active {
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
+        }
+
+        .dual-rx-ctrl {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 4px;
+        }
+        .btn-dual-rx {
+            background: var(--bg-card);
+            color: var(--text-muted);
+            border: 1px solid var(--border-light);
+            border-radius: 4px;
+            padding: 5px 8px;
+            font-size: 10.5px;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+            line-height: 1.2;
+        }
+        .btn-dual-rx.active {
+            background: var(--green);
+            color: #fff;
+            border-color: #22c55e;
+        }
+        .btn-swap-ms {
+            background: var(--bg-card);
+            color: var(--text);
+            border: 1px solid var(--border-light);
+            border-radius: 4px;
+            padding: 4px 6px;
+            font-size: 10.5px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .btn-swap-ms:hover {
+            background: #32323c;
+        }
+
+        /* S-Meter & Power (Calibrated: S0..S9 = 0..60% Blue, S9..+60dB = 60..100% Yellow->Red) */
+        .meters-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 6px 10px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: 4px;
+        }
+        .meter-line {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+        .meter-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 10.5px;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+        .meter-val-readout {
+            color: var(--text);
+            font-family: 'Consolas', monospace;
+        }
+        .meter-track {
+            position: relative;
+            width: 100%;
+            height: 9px;
+            background: var(--bg-input);
+            border: 1px solid var(--border-light);
+            border-radius: 3px;
+            overflow: visible;
+            cursor: pointer;
+        }
+        /* S9 tick line on the meter track at 60% */
+        .meter-track::after {
+            content: '';
+            position: absolute;
+            left: 60%;
+            top: 0;
+            bottom: 0;
+            width: 1px;
+            background: rgba(255, 255, 255, 0.25);
+            pointer-events: none;
+        }
+        .smeter-bar {
+            width: 100%;
+            height: 100%;
+            border-radius: 2px;
+            /* Fixed-scale gradient across the full meter track:
+               0%..60% (S0..S9) is solid blue,
+               60%..100% (S9..+60dB) fades from yellow (#eab308) through orange (#f97316) to red (#ef4444) */
+            background: linear-gradient(90deg, #3b82f6 0%, #3b82f6 60%, #eab308 60.5%, #f97316 78%, #ef4444 100%);
+            clip-path: inset(0 100% 0 0);
+            transition: clip-path 0.06s linear;
+        }
+        .smeter-sql-marker {
+            position: absolute;
+            top: -3px;
+            bottom: -3px;
+            width: 2px;
+            transform: translateX(-50%);
+            background: #f59e0b;
+            box-shadow: 0 0 4px rgba(245, 158, 11, 0.9);
+            border-radius: 1px;
+            z-index: 4;
+            pointer-events: none;
+            transition: background 0.08s ease, box-shadow 0.08s ease;
+        }
+        .smeter-sql-marker.sql-open {
+            background: #22c55e;
+            box-shadow: 0 0 6px rgba(34, 197, 94, 0.95);
+        }
+        .meter-scale-ticks {
+            position: relative;
+            width: 100%;
+            height: 12px;
+            font-size: 9px;
+            color: var(--text-dim);
+            font-family: 'Consolas', monospace;
+        }
+        .meter-scale-ticks span {
+            position: absolute;
+            top: 0;
+            transform: translateX(-50%);
+            white-space: nowrap;
+        }
+        .meter-scale-ticks span:first-child {
+            transform: none;
+        }
+        .meter-scale-ticks span:last-child {
+            transform: translateX(-100%);
+        }
+
+        .power-atu-row {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            padding-top: 1px;
+            width: 100%;
+        }
+        .pwr-line {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            width: 100%;
+            font-size: 10.5px;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+        .pwr-lbl {
+            width: 58px;
+            min-width: 58px;
+            flex-shrink: 0;
+            color: var(--text-muted);
+            font-size: 10.5px;
+        }
+        .pwr-line input[type="range"] {
+            flex: 1;
+            min-width: 45px;
+            height: 5px;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+        .pwr-val {
+            color: var(--text);
+            min-width: 34px;
+            text-align: right;
+            font-family: 'Consolas', monospace;
+            flex-shrink: 0;
+            font-size: 11px;
+        }
+        .sql-val {
+            color: var(--text-muted);
+            min-width: 34px;
+            text-align: right;
+            font-family: 'Consolas', monospace;
+            flex-shrink: 0;
+            font-size: 11px;
+        }
+        .sql-val.sql-armed {
+            color: #f59e0b;
+        }
+        .sql-val.sql-open {
+            color: #4ade80;
+            font-weight: 700;
+        }
+        .btn-atu {
+            background: #2d2d36;
+            color: var(--text);
+            border: 1px solid var(--border-light);
+            padding: 3px 9px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .btn-atu:hover {
+            background: #3b3b46;
+        }
+
+        /* Row 3: Bands & Modes */
+        .controls-strip {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 4px 8px;
+            min-height: 34px;
+            flex-wrap: wrap;
+            flex-shrink: 0;
+        }
+        .strip-group {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            flex-wrap: wrap;
+        }
+        .strip-label {
+            font-size: 10.5px;
+            font-weight: 600;
+            color: var(--text-muted);
+            margin-right: 4px;
+        }
+        .chip-btn {
+            background: var(--bg-input);
+            color: var(--text-muted);
+            border: 1px solid var(--border-light);
+            border-radius: 3px;
+            padding: 3px 7px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .chip-btn:hover {
+            color: var(--text);
+            border-color: #52525b;
+        }
+        .chip-btn.active,
+        .chip-btn.mode-active,
+        .chip-btn.fil-active {
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
+        }
+        .chip-btn.vhf-band-btn {
+            padding: 3px 12px;
+            font-size: 11.5px;
+        }
+
+        /* Row 4: Large Spectrum & Waterfall */
+        .waterfall-panel {
+            flex: 1;
+            min-height: 120px;
+            background: #09090b;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .wf-toolbar {
+            height: 26px;
+            min-height: 26px;
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 10px;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+        .wf-toolbar-right {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 11px;
+        }
+        .wf-toolbar-right input[type="range"] {
+            width: 62px;
+            height: 4px;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+        .wf-mode-switch {
+            display: inline-flex;
+            background: var(--bg-input);
+            border: 1px solid var(--border-light);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-right: 4px;
+        }
+        .wf-mode-btn {
+            background: transparent;
+            color: var(--text-muted);
+            border: none;
+            padding: 2px 8px;
+            font-size: 10.5px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .wf-mode-btn:hover {
+            color: var(--text);
+        }
+        .wf-mode-btn.active {
+            background: var(--accent);
+            color: #fff;
+        }
+        .web-ui-link {
+            cursor: pointer;
+            padding: 2px 6px;
+            border-radius: 4px;
+            transition: background 0.15s ease, color 0.15s ease;
+        }
+        .web-ui-link:hover {
+            background: rgba(59, 130, 246, 0.15);
+            color: var(--text);
+        }
+        .web-ui-link:hover code {
+            border-color: var(--accent);
+            color: #93c5fd;
+        }
+        .wf-canvas-wrap {
+            flex: 1;
+            width: 100%;
+            height: 100%;
+            min-height: 0;
+            position: relative;
+        }
+        canvas.wf-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            cursor: crosshair;
+        }
+
+        /* Row 5: PTT & Key Binding */
+        .ptt-bar {
+            display: grid;
+            grid-template-columns: 1.3fr 1fr auto;
+            gap: 6px;
+            align-items: stretch;
+            height: 36px;
+            min-height: 36px;
+            flex-shrink: 0;
+        }
+        .btn-ptt-main {
+            background: #27272f;
+            color: var(--text);
+            border: 1px solid var(--border-light);
+            border-radius: 4px;
+            font-size: 12.5px;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .btn-ptt-main:hover {
+            background: #32323c;
+        }
+        .btn-ptt-main.tx-active {
+            background: var(--red) !important;
+            border-color: #f87171 !important;
+            color: #fff !important;
+        }
+        .btn-key-bind {
+            background: var(--bg-card);
+            color: var(--text);
+            border: 1px solid var(--border-light);
+            border-radius: 4px;
+            font-size: 11.5px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            padding: 0 8px;
+        }
+        .btn-key-bind.binding {
+            border-color: var(--amber);
+            color: #fbbf24;
+        }
+        .btn-global-check {
+            background: var(--bg-card);
+            color: var(--text-muted);
+            border: 1px solid var(--border-light);
+            border-radius: 4px;
+            padding: 0 10px;
+            font-size: 11.5px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+        }
+        .btn-global-check .chk-box {
+            width: 14px;
+            height: 14px;
+            border-radius: 3px;
+            border: 1px solid var(--text-dim);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            color: transparent;
+        }
+        .btn-global-check.checked {
+            border-color: var(--accent);
+            color: var(--text);
+        }
+        .btn-global-check.checked .chk-box {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #fff;
+        }
+
+        /* Row 6: Compact Audio I/O Bar */
+        .audio-bar {
+            display: grid;
+            grid-template-columns: minmax(70px, 1fr) minmax(70px, 1fr) minmax(80px, 1.1fr) minmax(70px, 1fr) auto auto;
+            gap: 6px;
+            align-items: center;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            padding: 4px 8px;
+            min-height: 42px;
+            flex-shrink: 0;
+        }
+        .audio-cell {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+        .audio-cell label {
+            font-size: 9px;
+            font-weight: 600;
+            color: var(--text-dim);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .audio-cell select {
+            width: 100%;
+            font-size: 10.5px;
+            padding: 1px 4px;
+            height: 20px;
+        }
+        .cat-server-cell {
+            min-width: 125px;
+        }
+        .cat-ip-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(22, 163, 74, 0.22);
+            border: 1px solid rgba(34, 197, 94, 0.55);
+            border-radius: 4px;
+            padding: 1px 8px;
+            height: 22px;
+            box-sizing: border-box;
+            cursor: default;
+        }
+        .cat-ip-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #22c55e;
+            box-shadow: 0 0 6px rgba(34, 197, 94, 0.9);
+            flex-shrink: 0;
+        }
+        .cat-ip-addr {
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 12px;
+            font-weight: 700;
+            color: #4ade80;
+            letter-spacing: 0.5px;
+            user-select: all;
+        }
+        .audio-actions {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .vol-mini {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 10.5px;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+        .vol-mini input[type="range"] {
+            width: 55px;
+            height: 4px;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+        .btn-rec {
+            background: #2b1d20;
+            border-color: #7f1d1d;
+            color: #fca5a5;
+        }
+        .btn-rec:hover {
+            background: #451a1c;
+            border-color: #ef4444;
+            color: #fff;
+        }
+        .btn-rec-active {
+            background: var(--red);
+            border-color: #f87171;
+            color: #fff;
+            animation: rec-pulse 1.2s infinite ease-in-out;
+        }
+        @keyframes rec-pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.78; }
+        }
+
+        /* Bookmarks Drawer & Overlay */
+        .bm-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.55);
+            z-index: 9998;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.22s ease;
+        }
+        .bm-backdrop.open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .bm-drawer {
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 370px;
+            max-width: 90vw;
+            height: 100vh;
+            background: #15161c;
+            border-left: 1px solid var(--border-light);
+            box-shadow: -8px 0 28px rgba(0, 0, 0, 0.75);
+            z-index: 9999;
+            transform: translateX(100%);
+            transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .bm-drawer.open {
+            transform: translateX(0);
+        }
+        .bm-header {
+            padding: 10px 14px;
+            background: #1a1b24;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .bm-quick-bar {
+            padding: 10px 14px;
+            background: #181922;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .bm-form-card {
+            padding: 10px 14px;
+            background: #1e202b;
+            border-bottom: 1px solid var(--border);
+        }
+        .bm-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .bm-card {
+            background: #1a1b24;
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            padding: 8px 10px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+        .bm-card:hover {
+            background: #232533;
+            border-color: var(--accent);
+            transform: translateY(-1px);
+        }
+        .bm-card.tuned {
+            border-color: #22c55e !important;
+            background: rgba(34, 197, 94, 0.18) !important;
+        }
+        .bm-card-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 0;
+            flex: 1;
+        }
+        .bm-card-name {
+            font-size: 12.5px;
+            font-weight: 700;
+            color: #fff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .bm-card-meta {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 11px;
+        }
+        .bm-freq-pill {
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-weight: 700;
+            color: #38bdf8;
+            font-size: 12px;
+        }
+        .bm-mode-tag {
+            background: #2b3044;
+            color: #a5b4fc;
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: 700;
+        }
+        .bm-radio-tag {
+            background: #27272a;
+            color: #a1a1aa;
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-size: 9.5px;
+            font-weight: 600;
+        }
+        .bm-del-btn {
+            background: transparent;
+            border: none;
+            color: #71717a;
+            font-size: 15px;
+            font-weight: 700;
+            cursor: pointer;
+            padding: 3px 6px;
+            border-radius: 3px;
+            line-height: 1;
+        }
+        .bm-del-btn:hover {
+            color: #ef4444;
+            background: rgba(239, 68, 68, 0.15);
+        }
+        .bm-toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: #1e293b;
+            color: #38bdf8;
+            border: 1px solid #3b82f6;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6);
+            z-index: 10001;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.2s ease;
+            pointer-events: none;
+        }
+        .bm-toast.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="topbar">
+        <div class="topbar-left">
+            <span class="topbar-title">Icom Remote Control</span>
+            <span style="margin-left: 8px;">Scroll mouse wheel over any VFO digit to tune</span>
+        </div>
+        <div class="topbar-center">
+            <span>View:</span>
+            <button class="view-btn active" id="view-btn-both" onclick="setVisibleDecks(true, true)">Both Radios</button>
+            <button class="view-btn" id="view-btn-1" onclick="setVisibleDecks(true, false)">Only IC-7300</button>
+            <button class="view-btn" id="view-btn-2" onclick="setVisibleDecks(false, true)">Only IC-9700</button>
+        </div>
+        <div class="topbar-right">
+            <button class="view-btn" id="btn-bm-toggle" onclick="toggleBookmarksDrawer()" style="background:#1e293b; border-color:#3b82f6; color:#93c5fd; font-weight:700; margin-right:8px; display:inline-flex; align-items:center; gap:5px;" title="Open Frequency Bookmarks">
+                <span>⭐ Bookmarks</span>
+                <span id="bm-badge" style="background:#2563eb; color:#fff; border-radius:10px; padding:1px 6px; font-size:10px;">0</span>
+            </button>
+            <span class="web-ui-link" onclick="openMobileWebBrowser()" title="Click to open Web / Mobile UI in your default browser">
+                Web / Mobile UI: <code id="mobile-url-label">https://localhost:8085</code>
+            </span>
+        </div>
+    </div>
+
+    <div class="dual-cockpit" id="cockpit-grid">
+
+        <!-- ==================== SLOT 1 (Auto-detects IC-7300 / IC-9700) ==================== -->
+        <div class="radio-deck" id="deck-1">
+            <div class="deck-header">
+                <div class="deck-title-group">
+                    <span class="deck-title" id="title-1">IC-7300</span>
+                    <span class="status-badge offline" id="status-1">OFFLINE</span>
+                    <button class="btn" style="padding:2px 6px; font-size:10px; color:#fbbf24; border-color:#d97706;" onclick="quickBookmarkRadio('1')" title="Add current frequency to Bookmarks">+ ⭐ Bookmark</button>
+                    <div class="header-filters" id="filters-1">
+                        <button class="chip-btn" data-fil="1" onclick="setFilter('1', 1)">FIL1</button>
+                        <button class="chip-btn" data-fil="2" onclick="setFilter('1', 2)">FIL2</button>
+                        <button class="chip-btn" data-fil="3" onclick="setFilter('1', 3)">FIL3</button>
+                    </div>
+                </div>
+                <div class="conn-controls">
+                    <select id="port-1" title="Select COM Port"></select>
+                    <select id="baud-1" title="Baudrate">
+                        <option value="115200" selected>115200</option>
+                        <option value="57600">57600</option>
+                        <option value="38400">38400</option>
+                        <option value="19200">19200</option>
+                        <option value="9600">9600</option>
+                    </select>
+                    <button class="btn" onclick="refreshPorts()">Refresh</button>
+                    <button class="btn btn-start" id="conn-btn-1" onclick="toggleConnect('1')">Connect</button>
+                    <button class="btn btn-pwr-on" id="radio-pwr-btn-1" onclick="toggleRadioPower('1')" title="Turn radio power ON or OFF via USB CI-V">Power ON</button>
+                    <button class="btn" id="hide-btn-1" onclick="hideDeck('1')" title="Hide this radio from screen">Hide</button>
+                </div>
+            </div>
+
+            <div class="dashboard-row" id="dash-1">
+                <!-- Single VFO (shown when model is IC-7300) -->
+                <div class="vfo-card" id="single-vfo-1">
+                    <div class="vfo-top-meta">
+                        <span class="vfo-tag">VFO Frequency</span>
+                        <span class="vfo-mode-pill" id="vfo-badge-1">USB | FIL1</span>
+                    </div>
+                    <div class="vfo-digits" id="vfo-digits-1"></div>
+                </div>
+
+                <!-- Dual VFO (shown automatically if model is IC-9700) -->
+                <div class="dual-vfo-container" id="dual-vfo-1" style="display: none;">
+                    <div class="sub-vfo-card active-band-card" id="vfo-card-1-main" onclick="selectDualBand('1', 'main')">
+                        <div class="vfo-top-meta">
+                            <span class="vfo-tag">MAIN VFO</span>
+                            <span class="vfo-mode-pill" id="vfo-badge-1-main">FM | FIL1</span>
+                        </div>
+                        <div class="vfo-digits" id="vfo-digits-1-main"></div>
+                    </div>
+                    <div class="dual-rx-ctrl">
+                        <button class="btn-dual-rx active" id="dual-rx-btn-1" onclick="toggleDualRx('1')">
+                            Dual RX<br><span id="dual-rx-txt-1">ON</span>
+                        </button>
+                        <button class="btn-swap-ms" onclick="swapMainSub('1')">Swap M/S</button>
+                    </div>
+                    <div class="sub-vfo-card" id="vfo-card-1-sub" onclick="selectDualBand('1', 'sub')">
+                        <div class="vfo-top-meta">
+                            <span class="vfo-tag">SUB VFO</span>
+                            <span class="vfo-mode-pill" id="vfo-badge-1-sub">FM | FIL1</span>
+                        </div>
+                        <div class="vfo-digits" id="vfo-digits-1-sub"></div>
+                    </div>
+                </div>
+
+                <div class="meters-card">
+                    <div class="meter-line">
+                        <div class="meter-labels">
+                            <span id="smeter-lbl-1">S-Meter</span>
+                            <span class="meter-val-readout" id="smeter-txt-1">S0</span>
+                        </div>
+                        <div class="meter-track" id="smeter-track-1" onclick="onSmeterTrackClick(event, '1')" title="Click on S-Meter or use Squelch slider to set software squelch threshold">
+                            <div class="smeter-bar" id="smeter-bar-1"></div>
+                            <div class="smeter-sql-marker" id="smeter-sql-marker-1" style="display: none;"></div>
+                        </div>
+                        <div class="meter-scale-ticks">
+                            <span style="left: 0%;">S0</span>
+                            <span style="left: 20%;">S3</span>
+                            <span style="left: 40%;">S6</span>
+                            <span style="left: 60%;">S9</span>
+                            <span style="left: 73.33%;">+20</span>
+                            <span style="left: 86.67%;">+40</span>
+                            <span style="left: 100%;">+60</span>
+                        </div>
+                    </div>
+                    <div class="power-atu-row">
+                        <div class="pwr-line">
+                            <span class="pwr-lbl">Squelch</span>
+                            <input type="range" id="sql-1" min="0" max="100" value="0" oninput="onSquelchSlide('1', this.value)">
+                            <span class="sql-val" id="sql-val-1">OFF</span>
+                        </div>
+                        <div class="pwr-line">
+                            <span class="pwr-lbl">RF Power</span>
+                            <input type="range" id="pwr-1" min="0" max="100" value="100" oninput="onPowerSlide('1', this.value)">
+                            <span class="pwr-val" id="pwr-val-1">100%</span>
+                            <button class="btn-atu" id="atu-btn-1" onclick="sendCmd('1', {type:'atu'})">Tune ATU</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="controls-strip">
+                <div class="strip-group" id="bands-hf-1">
+                    <span class="strip-label">Band:</span>
+                    <button class="chip-btn" data-band="160m" onclick="selectFreqBand('1', 1845000, 'LSB')">160m</button>
+                    <button class="chip-btn" data-band="80m" onclick="selectFreqBand('1', 3690000, 'LSB')">80m</button>
+                    <button class="chip-btn" data-band="60m" onclick="selectFreqBand('1', 5357000, 'USB')">60m</button>
+                    <button class="chip-btn" data-band="40m" onclick="selectFreqBand('1', 7100000, 'LSB')">40m</button>
+                    <button class="chip-btn" data-band="30m" onclick="selectFreqBand('1', 10120000, 'CW')">30m</button>
+                    <button class="chip-btn" data-band="20m" onclick="selectFreqBand('1', 14200000, 'USB')">20m</button>
+                    <button class="chip-btn" data-band="17m" onclick="selectFreqBand('1', 18130000, 'USB')">17m</button>
+                    <button class="chip-btn" data-band="15m" onclick="selectFreqBand('1', 21250000, 'USB')">15m</button>
+                    <button class="chip-btn" data-band="12m" onclick="selectFreqBand('1', 24940000, 'USB')">12m</button>
+                    <button class="chip-btn" data-band="10m" onclick="selectFreqBand('1', 28500000, 'USB')">10m</button>
+                    <button class="chip-btn" data-band="6m" onclick="selectFreqBand('1', 50150000, 'USB')">6m</button>
+                    <button class="chip-btn" data-band="4m" onclick="selectFreqBand('1', 70200000, 'USB')">4m</button>
+                </div>
+                <div class="strip-group" id="bands-vhf-1" style="display: none;">
+                    <span class="strip-label">Band:</span>
+                    <button class="chip-btn vhf-band-btn" data-band="2m" onclick="selectFreqBand('1', 145500000, 'FM')">2m (144 MHz)</button>
+                    <button class="chip-btn vhf-band-btn" data-band="70cm" onclick="selectFreqBand('1', 433500000, 'FM')">70cm (432 MHz)</button>
+                    <button class="chip-btn vhf-band-btn" data-band="23cm" onclick="selectFreqBand('1', 1297500000, 'FM')">23cm (1296 MHz)</button>
+                </div>
+                <div class="strip-group" id="modes-1">
+                    <span class="strip-label">Mode:</span>
+                    <button class="chip-btn" data-mode="LSB" onclick="setMode('1', 'LSB')">LSB</button>
+                    <button class="chip-btn" data-mode="USB" onclick="setMode('1', 'USB')">USB</button>
+                    <button class="chip-btn" data-mode="CW" onclick="setMode('1', 'CW')">CW</button>
+                    <button class="chip-btn" data-mode="RTTY" onclick="setMode('1', 'RTTY')">RTTY</button>
+                    <button class="chip-btn" data-mode="AM" onclick="setMode('1', 'AM')">AM</button>
+                    <button class="chip-btn" data-mode="FM" onclick="setMode('1', 'FM')">FM</button>
+                    <button class="chip-btn" data-mode="DV" id="dv-btn-1" style="display: none;" onclick="setMode('1', 'DV')">DV</button>
+                    <button class="chip-btn" id="data-btn-1" onclick="toggleDataMode('1')">DATA</button>
+                </div>
+            </div>
+
+            <div class="waterfall-panel">
+                <div class="wf-toolbar">
+                    <span id="wf-band-badge-1">3D Waterfall & Waterfall</span>
+                    <div class="wf-toolbar-right">
+                        <div class="wf-mode-switch">
+                            <button class="wf-mode-btn" id="wf-mode-2d-1" onclick="setTopScopeMode('1', 'spectrum')">Spectrum</button>
+                            <button class="wf-mode-btn active" id="wf-mode-3d-1" onclick="setTopScopeMode('1', '3d')">3D Waterfall</button>
+                        </div>
+                        <span title="Noise Filter: 0 = Max Sensitivity (see all weak signals), 100 = Heavy noise reduction">Filter:</span>
+                        <input type="range" id="wf-filter-1" min="0" max="100" value="25" title="Filter: 0 = Max Sensitivity (show all weak signals), 100 = Heavy noise reduction" oninput="setWfFilter('1', this.value)">
+                        <span id="wf-filter-val-1" style="min-width: 18px; font-size: 10px; color: var(--accent); font-weight: 600;">25</span>
+                        <span title="Waterfall contrast / brightness">Gain:</span>
+                        <input type="range" id="wf-gain-1" min="50" max="220" value="105" title="Waterfall Gain" oninput="setWfGain('1', this.value)">
+                    </div>
+                </div>
+                <div class="wf-canvas-wrap" id="wf-wrap-1">
+                    <canvas class="wf-canvas" id="wf-canvas-1"></canvas>
+                </div>
+            </div>
+
+            <div class="ptt-bar">
+                <button class="btn-ptt-main" id="ptt-btn-1"
+                        onmousedown="setPtt('1', 1)" onmouseup="setPtt('1', 0)" onmouseleave="if(radioState['1'].ptt===1 && !keyBindState['1'].held) setPtt('1', 0)">
+                    Hold to Transmit (PTT)
+                </button>
+                <button class="btn-key-bind" id="key-btn-1" onclick="startKeyBind('1')">
+                    PTT Key: <span id="key-name-1">None</span>
+                </button>
+                <button class="btn-global-check" id="global-btn-1" onclick="toggleGlobalPtt('1')" title="Allow PTT key to work even when another application window is active">
+                    <span class="chk-box">✓</span>
+                    <span>Background Key PTT</span>
+                </button>
+            </div>
+
+            <div class="audio-bar">
+                <div class="audio-cell">
+                    <label>Radio RX Input</label>
+                    <select id="aud-rx-1" onchange="onAudioDeviceChange('1')"></select>
+                </div>
+                <div class="audio-cell">
+                    <label>Radio TX Output</label>
+                    <select id="aud-tx-1" onchange="onAudioDeviceChange('1')"></select>
+                </div>
+                <div class="audio-cell">
+                    <label>PC Speaker / Headphones</label>
+                    <select id="aud-spk-1" onchange="onAudioDeviceChange('1')"></select>
+                </div>
+                <div class="audio-cell">
+                    <label>PC Microphone</label>
+                    <select id="aud-mic-1" onchange="onAudioDeviceChange('1')"></select>
+                </div>
+                <div class="audio-cell cat-server-cell">
+                    <label>CAT Server (Hamlib)</label>
+                    <div class="cat-ip-pill" title="Hamlib NET rigctl TCP Server">
+                        <span class="cat-ip-dot"></span>
+                        <span class="cat-ip-addr">127.0.0.1:4532</span>
+                    </div>
+                </div>
+                <div class="audio-actions">
+                    <div class="vol-mini">
+                        <span>Vol</span>
+                        <input type="range" id="aud-vol-1" min="0" max="150" value="100" oninput="onVolumeSlide('1', this.value)">
+                        <span id="aud-vol-txt-1" style="min-width:30px;">100%</span>
+                    </div>
+                    <button class="btn btn-start" id="aud-btn-1" onclick="toggleAudio('1')">Start Audio</button>
+                    <button class="btn btn-rec" id="rec-btn-1" onclick="toggleRecord('1')" title="Record incoming radio audio to WAV file">REC</button>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- ==================== SLOT 2 (Auto-detects IC-9700 / IC-7300) ==================== -->
+        <div class="radio-deck" id="deck-2">
+            <div class="deck-header">
+                <div class="deck-title-group">
+                    <span class="deck-title" id="title-2">IC-9700</span>
+                    <span class="status-badge offline" id="status-2">OFFLINE</span>
+                    <button class="btn" style="padding:2px 6px; font-size:10px; color:#fbbf24; border-color:#d97706;" onclick="quickBookmarkRadio('2')" title="Add current frequency to Bookmarks">+ ⭐ Bookmark</button>
+                    <div class="header-filters" id="filters-2">
+                        <button class="chip-btn" data-fil="1" onclick="setFilter('2', 1)">FIL1</button>
+                        <button class="chip-btn" data-fil="2" onclick="setFilter('2', 2)">FIL2</button>
+                        <button class="chip-btn" data-fil="3" onclick="setFilter('2', 3)">FIL3</button>
+                    </div>
+                </div>
+                <div class="conn-controls">
+                    <select id="port-2" title="Select COM Port"></select>
+                    <select id="baud-2" title="Baudrate">
+                        <option value="115200" selected>115200</option>
+                        <option value="57600">57600</option>
+                        <option value="38400">38400</option>
+                        <option value="19200">19200</option>
+                        <option value="9600">9600</option>
+                    </select>
+                    <button class="btn" onclick="refreshPorts()">Refresh</button>
+                    <button class="btn btn-start" id="conn-btn-2" onclick="toggleConnect('2')">Connect</button>
+                    <button class="btn btn-pwr-on" id="radio-pwr-btn-2" onclick="toggleRadioPower('2')" title="Turn radio power ON or OFF via USB CI-V">Power ON</button>
+                    <button class="btn" id="hide-btn-2" onclick="hideDeck('2')" title="Hide this radio from screen">Hide</button>
+                </div>
+            </div>
+
+            <div class="dashboard-row ic9700-dash" id="dash-2">
+                <!-- Single VFO (shown if model is IC-7300) -->
+                <div class="vfo-card" id="single-vfo-2" style="display: none;">
+                    <div class="vfo-top-meta">
+                        <span class="vfo-tag">VFO Frequency</span>
+                        <span class="vfo-mode-pill" id="vfo-badge-2">USB | FIL1</span>
+                    </div>
+                    <div class="vfo-digits" id="vfo-digits-2"></div>
+                </div>
+
+                <!-- Dual VFO (shown when model is IC-9700) -->
+                <div class="dual-vfo-container" id="dual-vfo-2">
+                    <div class="sub-vfo-card active-band-card" id="vfo-card-2-main" onclick="selectDualBand('2', 'main')">
+                        <div class="vfo-top-meta">
+                            <span class="vfo-tag">MAIN VFO</span>
+                            <span class="vfo-mode-pill" id="vfo-badge-2-main">FM | FIL1</span>
+                        </div>
+                        <div class="vfo-digits" id="vfo-digits-2-main"></div>
+                    </div>
+
+                    <div class="dual-rx-ctrl">
+                        <button class="btn-dual-rx active" id="dual-rx-btn-2" onclick="toggleDualRx('2')" title="Toggle Dualwatch (listen to both Main and Sub simultaneously or Main only)">
+                            Dual RX<br><span id="dual-rx-txt-2">ON</span>
+                        </button>
+                        <button class="btn-swap-ms" onclick="swapMainSub('2')" title="Swap Main and Sub VFOs">
+                            Swap M/S
+                        </button>
+                    </div>
+
+                    <div class="sub-vfo-card" id="vfo-card-2-sub" onclick="selectDualBand('2', 'sub')">
+                        <div class="vfo-top-meta">
+                            <span class="vfo-tag">SUB VFO</span>
+                            <span class="vfo-mode-pill" id="vfo-badge-2-sub">FM | FIL1</span>
+                        </div>
+                        <div class="vfo-digits" id="vfo-digits-2-sub"></div>
+                    </div>
+                </div>
+
+                <div class="meters-card">
+                    <div class="meter-line">
+                        <div class="meter-labels">
+                            <span id="smeter-lbl-2">S-Meter (MAIN)</span>
+                            <span class="meter-val-readout" id="smeter-txt-2">S0</span>
+                        </div>
+                        <div class="meter-track" id="smeter-track-2" onclick="onSmeterTrackClick(event, '2')" title="Click on S-Meter or use Squelch slider to set software squelch threshold">
+                            <div class="smeter-bar" id="smeter-bar-2"></div>
+                            <div class="smeter-sql-marker" id="smeter-sql-marker-2" style="display: none;"></div>
+                        </div>
+                        <div class="meter-scale-ticks">
+                            <span style="left: 0%;">S0</span>
+                            <span style="left: 20%;">S3</span>
+                            <span style="left: 40%;">S6</span>
+                            <span style="left: 60%;">S9</span>
+                            <span style="left: 73.33%;">+20</span>
+                            <span style="left: 86.67%;">+40</span>
+                            <span style="left: 100%;">+60</span>
+                        </div>
+                    </div>
+                    <div class="power-atu-row">
+                        <div class="pwr-line">
+                            <span class="pwr-lbl">Squelch</span>
+                            <input type="range" id="sql-2" min="0" max="100" value="0" oninput="onSquelchSlide('2', this.value)">
+                            <span class="sql-val" id="sql-val-2">OFF</span>
+                        </div>
+                        <div class="pwr-line">
+                            <span class="pwr-lbl">RF Power</span>
+                            <input type="range" id="pwr-2" min="0" max="100" value="100" oninput="onPowerSlide('2', this.value)">
+                            <span class="pwr-val" id="pwr-val-2">100%</span>
+                            <button class="btn-atu" id="atu-btn-2" style="display: none;" onclick="sendCmd('2', {type:'atu'})">Tune ATU</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="controls-strip">
+                <div class="strip-group" id="bands-hf-2" style="display: none;">
+                    <span class="strip-label">Band:</span>
+                    <button class="chip-btn" data-band="160m" onclick="selectFreqBand('2', 1845000, 'LSB')">160m</button>
+                    <button class="chip-btn" data-band="80m" onclick="selectFreqBand('2', 3690000, 'LSB')">80m</button>
+                    <button class="chip-btn" data-band="60m" onclick="selectFreqBand('2', 5357000, 'USB')">60m</button>
+                    <button class="chip-btn" data-band="40m" onclick="selectFreqBand('2', 7100000, 'LSB')">40m</button>
+                    <button class="chip-btn" data-band="30m" onclick="selectFreqBand('2', 10120000, 'CW')">30m</button>
+                    <button class="chip-btn" data-band="20m" onclick="selectFreqBand('2', 14200000, 'USB')">20m</button>
+                    <button class="chip-btn" data-band="17m" onclick="selectFreqBand('2', 18130000, 'USB')">17m</button>
+                    <button class="chip-btn" data-band="15m" onclick="selectFreqBand('2', 21250000, 'USB')">15m</button>
+                    <button class="chip-btn" data-band="12m" onclick="selectFreqBand('2', 24940000, 'USB')">12m</button>
+                    <button class="chip-btn" data-band="10m" onclick="selectFreqBand('2', 28500000, 'USB')">10m</button>
+                    <button class="chip-btn" data-band="6m" onclick="selectFreqBand('2', 50150000, 'USB')">6m</button>
+                    <button class="chip-btn" data-band="4m" onclick="selectFreqBand('2', 70200000, 'USB')">4m</button>
+                </div>
+                <div class="strip-group" id="bands-vhf-2">
+                    <span class="strip-label">Band:</span>
+                    <button class="chip-btn vhf-band-btn" data-band="2m" onclick="selectFreqBand('2', 145500000, 'FM')">2m (144 MHz)</button>
+                    <button class="chip-btn vhf-band-btn" data-band="70cm" onclick="selectFreqBand('2', 433500000, 'FM')">70cm (432 MHz)</button>
+                    <button class="chip-btn vhf-band-btn" data-band="23cm" onclick="selectFreqBand('2', 1297500000, 'FM')">23cm (1296 MHz)</button>
+                </div>
+                <div class="strip-group" id="modes-2">
+                    <span class="strip-label">Mode:</span>
+                    <button class="chip-btn" data-mode="LSB" onclick="setMode('2', 'LSB')">LSB</button>
+                    <button class="chip-btn" data-mode="USB" onclick="setMode('2', 'USB')">USB</button>
+                    <button class="chip-btn" data-mode="CW" onclick="setMode('2', 'CW')">CW</button>
+                    <button class="chip-btn" data-mode="RTTY" onclick="setMode('2', 'RTTY')">RTTY</button>
+                    <button class="chip-btn" data-mode="AM" onclick="setMode('2', 'AM')">AM</button>
+                    <button class="chip-btn" data-mode="FM" onclick="setMode('2', 'FM')">FM</button>
+                    <button class="chip-btn" data-mode="DV" id="dv-btn-2" onclick="setMode('2', 'DV')">DV</button>
+                    <button class="chip-btn" id="data-btn-2" onclick="toggleDataMode('2')">DATA</button>
+                </div>
+            </div>
+
+            <div class="waterfall-panel">
+                <div class="wf-toolbar">
+                    <span id="wf-band-badge-2">3D Waterfall & Waterfall (MAIN VFO)</span>
+                    <div class="wf-toolbar-right">
+                        <div class="wf-mode-switch">
+                            <button class="wf-mode-btn" id="wf-mode-2d-2" onclick="setTopScopeMode('2', 'spectrum')">Spectrum</button>
+                            <button class="wf-mode-btn active" id="wf-mode-3d-2" onclick="setTopScopeMode('2', '3d')">3D Waterfall</button>
+                        </div>
+                        <span title="Noise Filter: 0 = Max Sensitivity (see all weak signals), 100 = Heavy noise reduction">Filter:</span>
+                        <input type="range" id="wf-filter-2" min="0" max="100" value="25" title="Filter: 0 = Max Sensitivity (show all weak signals), 100 = Heavy noise reduction" oninput="setWfFilter('2', this.value)">
+                        <span id="wf-filter-val-2" style="min-width: 18px; font-size: 10px; color: var(--accent); font-weight: 600;">25</span>
+                        <span title="Waterfall contrast / brightness">Gain:</span>
+                        <input type="range" id="wf-gain-2" min="50" max="220" value="105" title="Waterfall Gain" oninput="setWfGain('2', this.value)">
+                    </div>
+                </div>
+                <div class="wf-canvas-wrap" id="wf-wrap-2">
+                    <canvas class="wf-canvas" id="wf-canvas-2"></canvas>
+                </div>
+            </div>
+
+            <div class="ptt-bar">
+                <button class="btn-ptt-main" id="ptt-btn-2"
+                        onmousedown="setPtt('2', 1)" onmouseup="setPtt('2', 0)" onmouseleave="if(radioState['2'].ptt===1 && !keyBindState['2'].held) setPtt('2', 0)">
+                    Hold to Transmit (PTT)
+                </button>
+                <button class="btn-key-bind" id="key-btn-2" onclick="startKeyBind('2')">
+                    PTT Key: <span id="key-name-2">None</span>
+                </button>
+                <button class="btn-global-check" id="global-btn-2" onclick="toggleGlobalPtt('2')" title="Allow PTT key to work even when another application window is active">
+                    <span class="chk-box">✓</span>
+                    <span>Background Key PTT</span>
+                </button>
+            </div>
+
+            <div class="audio-bar">
+                <div class="audio-cell">
+                    <label>Radio RX Input</label>
+                    <select id="aud-rx-2" onchange="onAudioDeviceChange('2')"></select>
+                </div>
+                <div class="audio-cell">
+                    <label>Radio TX Output</label>
+                    <select id="aud-tx-2" onchange="onAudioDeviceChange('2')"></select>
+                </div>
+                <div class="audio-cell">
+                    <label>PC Speaker / Headphones</label>
+                    <select id="aud-spk-2" onchange="onAudioDeviceChange('2')"></select>
+                </div>
+                <div class="audio-cell">
+                    <label>PC Microphone</label>
+                    <select id="aud-mic-2" onchange="onAudioDeviceChange('2')"></select>
+                </div>
+                <div class="audio-cell cat-server-cell">
+                    <label>CAT Server (Hamlib)</label>
+                    <div class="cat-ip-pill" title="Hamlib NET rigctl TCP Server">
+                        <span class="cat-ip-dot"></span>
+                        <span class="cat-ip-addr">127.0.0.1:4533</span>
+                    </div>
+                </div>
+                <div class="audio-actions">
+                    <div class="vol-mini">
+                        <span>Vol</span>
+                        <input type="range" id="aud-vol-2" min="0" max="150" value="100" oninput="onVolumeSlide('2', this.value)">
+                        <span id="aud-vol-txt-2" style="min-width:30px;">100%</span>
+                    </div>
+                    <button class="btn btn-start" id="aud-btn-2" onclick="toggleAudio('2')">Start Audio</button>
+                    <button class="btn btn-rec" id="rec-btn-2" onclick="toggleRecord('2')" title="Record incoming radio audio to WAV file">REC</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Bookmarks Slide-Out Drawer -->
+    <div id="bm-backdrop" class="bm-backdrop" onclick="toggleBookmarksDrawer(false)"></div>
+    <div id="bm-drawer" class="bm-drawer">
+        <div class="bm-header">
+            <div style="display:flex; align-items:center; gap:8px;">
+                <span style="font-size:16px;">⭐</span>
+                <span style="font-weight:700; font-size:13.5px; color:#fff;">Frequency Bookmarks</span>
+                <span id="bm-drawer-count" class="status-badge online" style="font-size:10px;">0</span>
+            </div>
+            <button class="btn" style="padding:2px 8px; font-size:13px; font-weight:700;" onclick="toggleBookmarksDrawer(false)">✕</button>
+        </div>
+
+        <!-- Quick Add Active Frequency -->
+        <div class="bm-quick-bar">
+            <div style="font-size:10.5px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">+ Add Current Frequency:</div>
+            <div style="display:flex; gap:6px;">
+                <button class="btn btn-start" id="bm-quick-btn-1" onclick="quickBookmarkRadio('1')" style="flex:1; text-align:center; font-size:10.5px; padding:5px 6px;" title="Save IC-7300 frequency">
+                    + IC-7300 (<span id="bm-qfreq-1">---</span>)
+                </button>
+                <button class="btn btn-start" id="bm-quick-btn-2" onclick="quickBookmarkRadio('2')" style="flex:1; text-align:center; font-size:10.5px; padding:5px 6px;" title="Save IC-9700 frequency">
+                    + IC-9700 (<span id="bm-qfreq-2">---</span>)
+                </button>
+            </div>
+        </div>
+
+        <!-- Add Custom Bookmark Form -->
+        <div class="bm-form-card">
+            <div style="font-size:10.5px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">New Bookmark (Custom):</div>
+            <div style="display:grid; grid-template-columns: 2fr 1fr; gap:6px; margin-bottom:6px;">
+                <input type="text" id="bm-input-name" placeholder="Name (e.g. 80m FT8)" style="font-size:11.5px; padding:5px 8px;" onkeydown="if(event.key==='Enter') saveNewBookmarkFromForm()">
+                <select id="bm-input-mode" style="font-size:11.5px; padding:5px 4px;">
+                    <option value="USB-D">USB-D</option>
+                    <option value="USB">USB</option>
+                    <option value="LSB">LSB</option>
+                    <option value="CW">CW</option>
+                    <option value="FM">FM</option>
+                    <option value="AM">AM</option>
+                    <option value="DV">DV</option>
+                </select>
+            </div>
+            <div style="display:grid; grid-template-columns: 2fr 1.2fr auto; gap:6px;">
+                <input type="text" id="bm-input-freq" placeholder="Frequency (MHz / kHz)" style="font-size:11.5px; padding:5px 8px;" onkeydown="if(event.key==='Enter') saveNewBookmarkFromForm()">
+                <select id="bm-input-radio" style="font-size:11px; padding:5px 4px;">
+                    <option value="auto">Auto Radio</option>
+                    <option value="1">IC-7300</option>
+                    <option value="2">IC-9700</option>
+                </select>
+                <button class="btn btn-start" onclick="saveNewBookmarkFromForm()" style="font-size:11px; padding:5px 10px; font-weight:700;">Save</button>
+            </div>
+        </div>
+
+        <!-- Search input -->
+        <div style="padding: 6px 14px 2px 14px;">
+            <input type="text" id="bm-search" placeholder="Search by name or frequency..." oninput="renderBookmarksList()" style="width:100%; font-size:11px; padding:4px 8px;">
+        </div>
+
+        <!-- Bookmarks Cards List -->
+        <div class="bm-list" id="bm-list"></div>
+    </div>
+
+    <!-- Quick Toast Notification -->
+    <div id="bm-toast" class="bm-toast"></div>
+
+    <script>
+        document.getElementById('mobile-url-label').textContent = `https://${window.location.hostname || 'localhost'}:8085`;
+
+        async function openMobileWebBrowser() {
+            const urlText = document.getElementById('mobile-url-label').textContent.trim();
+            try {
+                await fetch('/api/open_browser', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: urlText })
+                });
+            } catch (e) {
+                window.open(urlText, '_blank');
+            }
+        }
+
+        async function autoConfigureWsjtx(rid) {
+            try {
+                const res = await fetch('/api/wsjtx_config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ radio_id: rid })
+                });
+                const d = await res.json();
+                if (d.status === 'ok') {
+                    alert(`${d.message}\n\nYou can now open WSJT-X or WSJT-Z! It will connect directly to the radio through this software.`);
+                } else {
+                    alert('Notice: ' + (d.error || 'Could not configure WSJT-X automatically.') +
+                          '\n\nYou can configure manually in WSJT-X:\nFile -> Settings -> Radio:\nRig: Hamlib NET rigctl\nNetwork server: 127.0.0.1:' + (rid === '1' ? '4532' : '4533') + '\nPTT Method: CAT');
+                }
+            } catch (e) {
+                alert('Connection error: ' + e);
+            }
+        }
+
+        const radioState = {
+            '1': {
+                connected: false, online: false, model: 'IC-7300',
+                taajuus_hz: 14200000, mode: 'USB', filter: 1, data_on: false,
+                dual_rx: 0, active_band: 0,
+                main_hz: 14200000, main_mode: 'USB', main_filter: 1,
+                sub_hz: 433500000, sub_mode: 'FM', sub_filter: 1,
+                smeter: 'S0', smeter_pct: 0, ptt: 0, power_pct: 100, sql_pct: 0
+            },
+            '2': {
+                connected: false, online: false, model: 'IC-9700',
+                taajuus_hz: 145500000, mode: 'FM', filter: 1, data_on: false,
+                dual_rx: 1, active_band: 0,
+                main_hz: 145500000, main_mode: 'FM', main_filter: 1,
+                sub_hz: 433500000, sub_mode: 'FM', sub_filter: 1,
+                smeter: 'S0', smeter_pct: 0, ptt: 0, power_pct: 100, sql_pct: 0
+            }
+        };
+
+        const deckVisible = { '1': true, '2': true };
+        const audioActive = { '1': false, '2': false };
+        const recState = {
+            '1': { recording: false, startTime: 0, timer: null },
+            '2': { recording: false, startTime: 0, timer: null }
+        };
+        const keyBindState = {
+            '1': { listening: false, code: 0, name: 'None', global: false, held: false },
+            '2': { listening: false, code: 0, name: 'None', global: false, held: false }
+        };
+
+        function isIc9700(rid) {
+            const m = (radioState[rid] && radioState[rid].model) || '';
+            return m.includes('9700');
+        }
+
+        // ==================== SHOW / HIDE RADIO PANELS ====================
+        function setVisibleDecks(show1, show2) {
+            if (!show1 && !show2) show1 = true;
+            deckVisible['1'] = !!show1;
+            deckVisible['2'] = !!show2;
+            localStorage.setItem('icom_deck_vis_1', deckVisible['1'] ? '1' : '0');
+            localStorage.setItem('icom_deck_vis_2', deckVisible['2'] ? '1' : '0');
+            applyDeckVisibility();
+        }
+
+        function hideDeck(rid) {
+            if (rid === '1') {
+                setVisibleDecks(false, true);
+            } else {
+                setVisibleDecks(true, false);
+            }
+        }
+
+        function applyDeckVisibility() {
+            const d1 = document.getElementById('deck-1');
+            const d2 = document.getElementById('deck-2');
+            const grid = document.getElementById('cockpit-grid');
+            d1.classList.toggle('hidden-deck', !deckVisible['1']);
+            d2.classList.toggle('hidden-deck', !deckVisible['2']);
+
+            const bothVisible = deckVisible['1'] && deckVisible['2'];
+            grid.classList.toggle('single-view', !bothVisible);
+
+            document.getElementById('hide-btn-1').style.display = bothVisible ? 'inline-block' : 'none';
+            document.getElementById('hide-btn-2').style.display = bothVisible ? 'inline-block' : 'none';
+
+            const m1 = (radioState['1'] && radioState['1'].model) || 'IC-7300';
+            const m2 = (radioState['2'] && radioState['2'].model) || 'IC-9700';
+            const bBoth = document.getElementById('view-btn-both');
+            const b1 = document.getElementById('view-btn-1');
+            const b2 = document.getElementById('view-btn-2');
+            b1.textContent = `Only ${m1}`;
+            b2.textContent = `Only ${m2}`;
+            bBoth.classList.toggle('active', bothVisible);
+            b1.classList.toggle('active', deckVisible['1'] && !deckVisible['2']);
+            b2.classList.toggle('active', !deckVisible['1'] && deckVisible['2']);
+
+            setTimeout(resizeCanvases, 30);
+        }
+
+        (function initSavedVisibility() {
+            const v1 = localStorage.getItem('icom_deck_vis_1');
+            const v2 = localStorage.getItem('icom_deck_vis_2');
+            if (v1 !== null && v2 !== null) {
+                deckVisible['1'] = (v1 !== '0');
+                deckVisible['2'] = (v2 !== '0');
+                if (!deckVisible['1'] && !deckVisible['2']) deckVisible['1'] = true;
+            }
+            applyDeckVisibility();
+        })();
+
+        // ==================== FREQUENCY TUNING & WATERFALL INTERACTION ====================
+        function applyNewFrequency(rid, nextHz, vfoTarget) {
+            const model9700 = isIc9700(rid);
+            if (model9700 && vfoTarget) {
+                if (vfoTarget === 'main') {
+                    radioState[rid].main_hz = nextHz;
+                    radioState[rid].active_band = 0;
+                } else {
+                    radioState[rid].sub_hz = nextHz;
+                    radioState[rid].active_band = 1;
+                    radioState[rid].dual_rx = 1;
+                }
+                radioState[rid].taajuus_hz = nextHz;
+                renderRadioState(rid);
+                sendCmd(rid, { type: 'taajuus', hz: nextHz, vfo: vfoTarget });
+            } else {
+                radioState[rid].taajuus_hz = nextHz;
+                renderRadioState(rid);
+                sendCmd(rid, { type: 'taajuus', hz: nextHz });
+            }
+        }
+
+        function tuneWaterfallWheel(rid, deltaY) {
+            const dir = deltaY < 0 ? 1 : -1;
+            const stepHz = 500; // 0.5 kHz
+            const model9700 = isIc9700(rid);
+            const vfoTarget = model9700 ? (radioState[rid].active_band === 1 ? 'sub' : 'main') : null;
+            let curHz = radioState[rid].taajuus_hz || 14200000;
+            if (model9700 && vfoTarget === 'main') curHz = radioState[rid].main_hz || curHz;
+            if (model9700 && vfoTarget === 'sub') curHz = radioState[rid].sub_hz || curHz;
+
+            let nextHz;
+            const rem = curHz % stepHz;
+            if (rem === 0) {
+                nextHz = curHz + (dir * stepHz);
+            } else {
+                if (dir > 0) {
+                    // Snap UP to next 500 Hz multiple (e.g. 3573283 -> 3573500)
+                    nextHz = Math.floor(curHz / stepHz) * stepHz + stepHz;
+                } else {
+                    // Snap DOWN to previous 500 Hz multiple (e.g. 3573283 -> 3573000)
+                    nextHz = Math.floor(curHz / stepHz) * stepHz;
+                }
+            }
+
+            const minHz = model9700 ? 144000000 : 30000;
+            const maxHz = model9700 ? 1300000000 : 74800000;
+            nextHz = Math.max(minHz, Math.min(maxHz, nextHz));
+
+            applyNewFrequency(rid, nextHz, vfoTarget);
+        }
+
+        function onWaterfallClick(rid, e) {
+            const canvas = document.getElementById(`wf-canvas-${rid}`);
+            if (!canvas) return;
+            const rect = canvas.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const frac = Math.max(0, Math.min(1, clickX / rect.width));
+
+            const st = wfState[rid] || {};
+            const model9700 = isIc9700(rid);
+            const vfoTarget = model9700 ? (radioState[rid].active_band === 1 ? 'sub' : 'main') : null;
+            let curHz = radioState[rid].taajuus_hz || 14200000;
+            if (model9700 && vfoTarget === 'main') curHz = radioState[rid].main_hz || curHz;
+            if (model9700 && vfoTarget === 'sub') curHz = radioState[rid].sub_hz || curHz;
+
+            let targetHz;
+            if (st.centerMode === false && st.edgeHigh > st.edgeLow) {
+                targetHz = st.edgeLow + frac * (st.edgeHigh - st.edgeLow);
+            } else {
+                const spanHz = st.spanHz || 50000;
+                targetHz = curHz + (frac - 0.5) * spanHz;
+            }
+
+            const minHz = model9700 ? 144000000 : 30000;
+            const maxHz = model9700 ? 1300000000 : 74800000;
+            targetHz = Math.max(minHz, Math.min(maxHz, Math.round(targetHz)));
+
+            applyNewFrequency(rid, targetHz, vfoTarget);
+        }
+
+        function onWaterfallMouseMove(rid, e) {
+            const st = wfState[rid];
+            if (!st) return;
+            const canvas = document.getElementById(`wf-canvas-${rid}`);
+            if (!canvas) return;
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const frac = Math.max(0, Math.min(1, mouseX / rect.width));
+
+            const model9700 = isIc9700(rid);
+            const vfoTarget = model9700 ? (radioState[rid].active_band === 1 ? 'sub' : 'main') : null;
+            let curHz = radioState[rid].taajuus_hz || 14200000;
+            if (model9700 && vfoTarget === 'main') curHz = radioState[rid].main_hz || curHz;
+            if (model9700 && vfoTarget === 'sub') curHz = radioState[rid].sub_hz || curHz;
+
+            let hoverHz;
+            if (st.centerMode === false && st.edgeHigh > st.edgeLow) {
+                hoverHz = st.edgeLow + frac * (st.edgeHigh - st.edgeLow);
+            } else {
+                const spanHz = st.spanHz || 50000;
+                hoverHz = curHz + (frac - 0.5) * spanHz;
+            }
+            st.hoverFrac = frac;
+            st.hoverHz = Math.round(hoverHz);
+        }
+
+        function onWaterfallMouseLeave(rid) {
+            const st = wfState[rid];
+            if (st) {
+                st.hoverFrac = null;
+                st.hoverHz = null;
+            }
+        }
+
+        function setupWaterfallInteraction() {
+            ['1', '2'].forEach(rid => {
+                const canvas = document.getElementById(`wf-canvas-${rid}`);
+                const wrap = document.getElementById(`wf-wrap-${rid}`);
+                if (!canvas || !wrap) return;
+
+                const handleWheel = (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    tuneWaterfallWheel(rid, e.deltaY);
+                };
+                canvas.addEventListener('wheel', handleWheel, { passive: false });
+                wrap.addEventListener('wheel', handleWheel, { passive: false });
+
+                canvas.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onWaterfallClick(rid, e);
+                });
+
+                canvas.addEventListener('mousemove', (e) => {
+                    onWaterfallMouseMove(rid, e);
+                });
+
+                canvas.addEventListener('mouseleave', () => {
+                    onWaterfallMouseLeave(rid);
+                });
+            });
+        }
+
+        // ==================== VFO DIGITS & MOUSE WHEEL TUNING ====================
+        function buildVfoDigits(containerId, rid, vfoTarget, maxPow) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            container.innerHTML = '';
+
+            for (let p = maxPow; p >= 0; p--) {
+                const span = document.createElement('span');
+                span.className = 'vfo-digit';
+                span.dataset.pow = p;
+                span.dataset.step = Math.pow(10, p);
+                span.textContent = '0';
+
+                span.addEventListener('wheel', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const step = parseInt(span.dataset.step, 10);
+                    const dir = e.deltaY < 0 ? 1 : -1;
+                    const model9700 = isIc9700(rid);
+                    let curHz = radioState[rid].taajuus_hz;
+                    if (model9700 && vfoTarget === 'main') curHz = radioState[rid].main_hz || curHz;
+                    if (model9700 && vfoTarget === 'sub') curHz = radioState[rid].sub_hz || curHz;
+
+                    let nextHz = curHz + (dir * step);
+                    const minHz = model9700 ? 144000000 : 30000;
+                    const maxHz = model9700 ? 1300000000 : 74800000;
+                    nextHz = Math.max(minHz, Math.min(maxHz, nextHz));
+
+                    applyNewFrequency(rid, nextHz, vfoTarget);
+                }, { passive: false });
+
+                container.appendChild(span);
+
+                if (p === 6 || p === 3) {
+                    const sep = document.createElement('span');
+                    sep.className = 'vfo-sep';
+                    sep.textContent = '.';
+                    container.appendChild(sep);
+                }
+            }
+            const unit = document.createElement('span');
+            unit.className = 'vfo-unit';
+            unit.textContent = 'Hz';
+            container.appendChild(unit);
+        }
+
+        function updateVfoDigits(containerId, hz, totalDigits) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            const s = Math.max(0, Math.round(hz)).toString().padStart(totalDigits, '0');
+            const spans = container.querySelectorAll('.vfo-digit');
+            let leading = true;
+            spans.forEach((sp, idx) => {
+                const ch = s[idx] || '0';
+                sp.textContent = ch;
+                if (ch !== '0' || idx >= totalDigits - 7) leading = false;
+                sp.classList.toggle('leading-zero', leading);
+            });
+        }
+
+        ['1', '2'].forEach(rid => {
+            buildVfoDigits(`vfo-digits-${rid}`, rid, null, 8);
+            buildVfoDigits(`vfo-digits-${rid}-main`, rid, 'main', 9);
+            buildVfoDigits(`vfo-digits-${rid}-sub`, rid, 'sub', 9);
+        });
+
+        // ==================== NATIVE 1:1 PIXEL SHARP SPECTRUM, YAESU 3D WATERFALL & 2D WATERFALL ENGINE ====================
+        const WF_BINS = 475;
+        const WF3D_SLICES = 140;
+        const WF3D_STEP_FRAMES = 4; // 140 slices * 4 frames (132ms) = ~18.5 seconds of 3D history (20x slower than before)
+        const wfColorLUT = new Array(256);
+        (function initLUT() {
+            for (let v = 0; v < 256; v++) {
+                let r = 0, g = 0, b = 0;
+                if (v < 12) {
+                    // Deep dark SDR background floor (#05070e -> #091020)
+                    const t = v / 12;
+                    r = Math.floor(5 + t * 4);
+                    g = Math.floor(7 + t * 9);
+                    b = Math.floor(14 + t * 18);
+                } else if (v < 64) {
+                    // Weak signals & SSB harmonic valleys: Deep Navy -> Crisp Cobalt Blue (#091020 -> #2563eb)
+                    const t = (v - 12) / 52;
+                    r = Math.floor(9 + t * 28);
+                    g = Math.floor(16 + t * 83);
+                    b = Math.floor(32 + t * 203);
+                } else if (v < 122) {
+                    // Moderate signals: Cobalt Blue -> Razor-Sharp Cyan (#2563eb -> #06b6d4 -> #22d3ee)
+                    const t = (v - 64) / 58;
+                    r = Math.floor(37 * (1 - t * 0.45));
+                    g = Math.floor(99 + t * 115);
+                    b = Math.floor(235 + t * 5);
+                } else if (v < 176) {
+                    // Strong signal ridges: Cyan -> Lime -> Crisp Yellow (#22d3ee -> #fde047)
+                    const t = (v - 122) / 54;
+                    r = Math.floor(20 + t * 233);
+                    g = Math.floor(214 + t * 10);
+                    b = Math.floor(240 * (1 - t * 0.85));
+                } else if (v < 226) {
+                    // Very strong peaks: Yellow -> Orange -> Sharp Red (#fde047 -> #ef4444)
+                    const t = (v - 176) / 50;
+                    r = 253;
+                    g = Math.floor(224 * (1 - t * 0.75));
+                    b = Math.floor(36 * (1 - t));
+                } else {
+                    // Extreme peak core: Red -> White-Hot Core
+                    const t = (v - 226) / 29;
+                    r = 255;
+                    g = Math.floor(56 + t * 195);
+                    b = Math.floor(t * 220);
+                }
+                wfColorLUT[v] = [r, g, b];
+            }
+        })();
+
+        function createWfEngine(rid) {
+            const offscreen = document.createElement('canvas');
+            offscreen.width = 640;
+            offscreen.height = 300;
+            const offCtx = offscreen.getContext('2d', { alpha: false });
+            offCtx.fillStyle = '#05070e';
+            offCtx.fillRect(0, 0, 640, 300);
+
+            const history3D = [];
+            for (let s = 0; s < WF3D_SLICES; s++) {
+                history3D.push(new Float32Array(WF_BINS));
+            }
+
+            const savedMode = localStorage.getItem(`icom_top_scope_mode_v3_${rid}`) || '3d';
+            const savedGain = parseInt(localStorage.getItem(`icom_wf_gain_v1_${rid}`), 10);
+            const gain = !isNaN(savedGain) ? (savedGain / 100) : 1.05;
+            const savedFilter = parseInt(localStorage.getItem(`icom_wf_filter_v1_${rid}`), 10);
+            const filter = !isNaN(savedFilter) ? savedFilter : 25;
+
+            return {
+                offscreen,
+                offCtx,
+                rowImg: offCtx.createImageData(640, 1),
+                rawSortBuf: new Float32Array(WF_BINS),
+                prevAbove80: new Float32Array(WF_BINS),
+                targetSpec: new Float32Array(WF_BINS),
+                smoothSpec: new Float32Array(WF_BINS),
+                smooth3D: new Float32Array(WF_BINS),
+                wfCoherent: new Float32Array(WF_BINS),
+                wfTransient: new Float32Array(WF_BINS),
+                wfDisplay: new Float32Array(WF_BINS),
+                history3D,
+                histHead: 0,
+                tick3D: 0,
+                topMode: (savedMode === 'spectrum') ? 'spectrum' : '3d',
+                hasData: false,
+                gain: gain,
+                filter: filter,
+                spanHz: 50000,
+                centerMode: true,
+                edgeLow: 0,
+                edgeHigh: 0,
+                hoverFrac: null,
+                hoverHz: null
+            };
+        }
+
+        const wfState = {
+            '1': createWfEngine('1'),
+            '2': createWfEngine('2')
+        };
+
+        function setWfFilter(rid, val) {
+            const num = Math.max(0, Math.min(100, parseInt(val, 10) || 0));
+            if (wfState[rid]) wfState[rid].filter = num;
+            const txt = document.getElementById(`wf-filter-val-${rid}`);
+            if (txt) txt.textContent = num;
+            localStorage.setItem(`icom_wf_filter_v1_${rid}`, num);
+        }
+
+        function setWfGain(rid, val) {
+            const num = Math.max(50, Math.min(220, parseInt(val, 10) || 105));
+            if (wfState[rid]) wfState[rid].gain = num / 100;
+            localStorage.setItem(`icom_wf_gain_v1_${rid}`, num);
+        }
+
+        function setTopScopeMode(rid, mode) {
+            const st = wfState[rid];
+            if (!st) return;
+            st.topMode = (mode === '3d') ? '3d' : 'spectrum';
+            localStorage.setItem(`icom_top_scope_mode_v3_${rid}`, st.topMode);
+            const btn2d = document.getElementById(`wf-mode-2d-${rid}`);
+            const btn3d = document.getElementById(`wf-mode-3d-${rid}`);
+            if (btn2d) btn2d.classList.toggle('active', st.topMode === 'spectrum');
+            if (btn3d) btn3d.classList.toggle('active', st.topMode === '3d');
+            renderRadioState(rid);
+        }
+
+        // Apply saved 2D/3D button states and sliders on startup
+        ['1', '2'].forEach(rid => {
+            const mode = wfState[rid].topMode;
+            const btn2d = document.getElementById(`wf-mode-2d-${rid}`);
+            const btn3d = document.getElementById(`wf-mode-3d-${rid}`);
+            if (btn2d) btn2d.classList.toggle('active', mode === 'spectrum');
+            if (btn3d) btn3d.classList.toggle('active', mode === '3d');
+
+            const gSlider = document.getElementById(`wf-gain-${rid}`);
+            if (gSlider) gSlider.value = Math.round(wfState[rid].gain * 100);
+            const fSlider = document.getElementById(`wf-filter-${rid}`);
+            if (fSlider) fSlider.value = wfState[rid].filter;
+            const fTxt = document.getElementById(`wf-filter-val-${rid}`);
+            if (fTxt) fTxt.textContent = wfState[rid].filter;
+        });
+
+        function ensureOffscreenSize(st, targetW, targetH) {
+            const w = Math.max(64, targetW | 0);
+            const h = Math.max(64, targetH | 0);
+            if (st.offscreen.width === w && st.offscreen.height === h) return;
+
+            const tmp = document.createElement('canvas');
+            tmp.width = st.offscreen.width;
+            tmp.height = st.offscreen.height;
+            tmp.getContext('2d').drawImage(st.offscreen, 0, 0);
+
+            st.offscreen.width = w;
+            st.offscreen.height = h;
+            st.offCtx.fillStyle = '#05070e';
+            st.offCtx.fillRect(0, 0, w, h);
+            st.offCtx.drawImage(tmp, 0, 0, tmp.width, tmp.height, 0, 0, w, tmp.height);
+            st.rowImg = st.offCtx.createImageData(w, 1);
+        }
+
+        function resizeCanvases() {
+            const dpr = Math.min(2, window.devicePixelRatio || 1);
+            ['1', '2'].forEach(rid => {
+                if (!deckVisible[rid]) return;
+                const wrap = document.getElementById(`wf-wrap-${rid}`);
+                const canvas = document.getElementById(`wf-canvas-${rid}`);
+                if (!wrap || !canvas) return;
+                const rect = wrap.getBoundingClientRect();
+                const w = Math.max(280, Math.floor(rect.width * dpr));
+                const h = Math.max(60, Math.floor(rect.height * dpr));
+                if (canvas.width !== w || canvas.height !== h) {
+                    canvas.width = w;
+                    canvas.height = h;
+                }
+            });
+        }
+        window.addEventListener('resize', resizeCanvases);
+        setTimeout(resizeCanvases, 80);
+        setTimeout(setupWaterfallInteraction, 50);
+
+        function feedScopeData(rid, dataArr, spanHz, centerMode, edgeLow, edgeHigh) {
+            const st = wfState[rid];
+            if (!st || !dataArr || dataArr.length < 100) return;
+            if (spanHz) st.spanHz = spanHz;
+            if (centerMode !== undefined) st.centerMode = centerMode;
+            if (edgeLow !== undefined) st.edgeLow = edgeLow;
+            if (edgeHigh !== undefined) st.edgeHigh = edgeHigh;
+            const len = Math.min(WF_BINS, dataArr.length);
+
+            // 1. Dynamic receiver noise floor calculation:
+            // p20 represents true receiver noise floor even when 80m is heavily crowded with signals
+            for (let i = 0; i < len; i++) {
+                st.rawSortBuf[i] = dataArr[i];
+            }
+            st.rawSortBuf.subarray(0, len).sort();
+            const p20 = st.rawSortBuf[Math.floor(len * 0.20)];
+            const p50 = st.rawSortBuf[Math.floor(len * 0.50)];
+
+            // Filter ratio: 0.0 (maximum sensitivity, raw waterfall) to 1.0 (heavy noise reduction)
+            const filterVal = (st.filter !== undefined) ? st.filter : 25;
+            const fRatio = filterVal / 100.0;
+
+            // Base threshold: at filter=0 sits directly at p20; at filter=100 sits 12 units above p20
+            const noiseFloor = p20 + fRatio * 12.0;
+
+            // 2. First pass: extract SNR above noiseFloor
+            const tempAbove = new Float32Array(WF_BINS);
+            const rawCoh = new Float32Array(WF_BINS);
+
+            for (let i = 0; i < len; i++) {
+                const raw = dataArr[i];
+                const aboveFloor = Math.max(0, raw - noiseFloor);
+                tempAbove[i] = aboveFloor;
+
+                // Check if energy existed at this bin (or immediate neighbor) in previous sweep
+                const prevL = i > 0 ? st.prevAbove80[i - 1] : 0;
+                const prevC = st.prevAbove80[i];
+                const prevR = i + 1 < len ? st.prevAbove80[i + 1] : 0;
+                const prevMax = Math.max(prevC, prevL * 0.85, prevR * 0.85);
+
+                let cleanSig = 0;
+                if (filterVal === 0) {
+                    // Raw sensitivity mode: direct energy above noise floor
+                    cleanSig = aboveFloor;
+                } else if (prevMax >= 1.2) {
+                    // Coherent signal across sweeps: light gating
+                    cleanSig = Math.max(0, aboveFloor - fRatio * 1.0);
+                } else {
+                    // Single-sweep transient: moderate gating proportional to filter slider
+                    cleanSig = Math.max(0, aboveFloor - fRatio * 3.5);
+                }
+                rawCoh[i] = cleanSig;
+
+                // Spectrum display value: lively grass baseline + sharp unblurred peaks
+                const baseGrass = Math.max(0, raw - p20);
+                const specVal = Math.min(3.5, baseGrass * 0.16) + cleanSig * 1.25;
+                st.targetSpec[i] = specVal;
+                if (!st.hasData) {
+                    st.smoothSpec[i] = specVal;
+                    st.smooth3D[i] = cleanSig;
+                }
+            }
+
+            // 3. Second pass on Waterfall signals: Peak/Valley contrast sharpener
+            for (let i = 0; i < len; i++) {
+                st.prevAbove80[i] = tempAbove[i];
+                const c = rawCoh[i];
+                if (c > 0) {
+                    const l = i > 0 ? rawCoh[i - 1] : 0;
+                    const r = i + 1 < len ? rawCoh[i + 1] : 0;
+                    // Only suppress isolated 1-bin weak speckles if filter is active
+                    if (filterVal > 15 && c < fRatio * 3.0 && l === 0 && r === 0 && st.wfDisplay[i] < 1.0) {
+                        st.wfCoherent[i] = 0;
+                    } else {
+                        const avgLR = (l + r) * 0.5;
+                        let sharp = c + (c - avgLR) * 0.40;
+                        if (c < avgLR) {
+                            sharp = c * 0.75;
+                        }
+                        st.wfCoherent[i] = Math.max(0, sharp);
+                    }
+                } else {
+                    st.wfCoherent[i] = 0;
+                }
+                if (!st.hasData) {
+                    st.wfDisplay[i] = st.wfCoherent[i];
+                }
+            }
+
+            for (let i = len; i < WF_BINS; i++) {
+                st.prevAbove80[i] = 0;
+                st.targetSpec[i] = 0;
+                st.wfCoherent[i] = 0;
+            }
+            st.hasData = true;
+        }
+
+        function trace3DSignalIslands(ctx, rowData, sliceLeft, sliceWidth, baseY, heightScale, gain) {
+            let inIsland = false;
+            const binToX = sliceWidth / (WF_BINS - 1);
+            ctx.beginPath();
+            for (let i = 0; i < WF_BINS; i++) {
+                const v = rowData[i];
+                if (v > 0.75) {
+                    if (!inIsland) {
+                        const startBin = Math.max(0, i - 1);
+                        ctx.moveTo(sliceLeft + startBin * binToX, baseY);
+                        inIsland = true;
+                    }
+                    const px = sliceLeft + i * binToX;
+                    const norm = Math.min(1.0, (v / 110.0) * gain);
+                    ctx.lineTo(px, baseY - norm * heightScale);
+                } else if (inIsland) {
+                    ctx.lineTo(sliceLeft + i * binToX, baseY);
+                    ctx.closePath();
+                    inIsland = false;
+                }
+            }
+            if (inIsland) {
+                ctx.lineTo(sliceLeft + sliceWidth, baseY);
+                ctx.closePath();
+            }
+        }
+
+        function renderWaterfallsLoop() {
+            const dpr = Math.min(2, window.devicePixelRatio || 1);
+            ['1', '2'].forEach(rid => {
+                if (!deckVisible[rid]) return;
+                const canvas = document.getElementById(`wf-canvas-${rid}`);
+                if (!canvas) return;
+                const ctx = canvas.getContext('2d');
+                const w = canvas.width;
+                const h = canvas.height;
+                const st = wfState[rid];
+                const rState = radioState[rid];
+                const is3D = (st.topMode === '3d');
+
+                // Fixed symmetrical height for upper Spectrum / 3D Waterfall box on both radios
+                const specH = Math.floor(h * 0.28);
+                const scaleH = Math.round(18 * dpr);
+                const wfTop = specH + scaleH;
+                const wfH = Math.max(64, h - wfTop);
+
+                // Keep offscreen waterfall at exact 1:1 native screen pixel dimensions (zero scaling blur!)
+                ensureOffscreenSize(st, w, wfH);
+
+                ctx.fillStyle = '#06080f';
+                ctx.fillRect(0, 0, w, specH);
+
+                if (!is3D) {
+                    // Subtle 2D Spectrum grid lines
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+                    ctx.lineWidth = 1;
+                    for (let g = 1; g <= 3; g++) {
+                        const gy = Math.floor((specH / 4) * g) + 0.5;
+                        ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(w, gy); ctx.stroke();
+                    }
+                    for (let gx = 1; gx < 10; gx++) {
+                        const x = Math.floor((w / 10) * gx) + 0.5;
+                        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, specH); ctx.stroke();
+                    }
+                }
+
+                if (st.hasData && rState.online) {
+                    const gain = st.gain;
+
+                    // Update per-bin display state:
+                    // Fast attack (0.68) when signal appears, clean decay (0.32) when signal ends
+                    for (let i = 0; i < WF_BINS; i++) {
+                        const tgtS = st.targetSpec[i];
+                        const sAlpha = tgtS > st.smoothSpec[i] ? 0.55 : 0.35;
+                        st.smoothSpec[i] += (tgtS - st.smoothSpec[i]) * sAlpha;
+
+                        const tgtW = st.wfCoherent[i];
+                        if (tgtW === 0) {
+                            st.wfDisplay[i] *= 0.45;
+                            if (st.wfDisplay[i] < 0.8) st.wfDisplay[i] = 0;
+                        } else {
+                            const wAlpha = tgtW > st.wfDisplay[i] ? 0.68 : 0.42;
+                            st.wfDisplay[i] += (tgtW - st.wfDisplay[i]) * wAlpha;
+                        }
+
+                        // Smooth coherent signal envelope for 3D Waterfall (silky ridge profile, zero flutter)
+                        const s3Alpha = tgtW > st.smooth3D[i] ? 0.28 : 0.16;
+                        st.smooth3D[i] += (tgtW - st.smooth3D[i]) * s3Alpha;
+                        if (st.smooth3D[i] < 0.4) st.smooth3D[i] = 0;
+                    }
+
+                    // Advance 3D waterfall history slowly (1 new slice every 4 frames = ~18.5 seconds total depth)
+                    if (st.tick3D === 0) {
+                        st.histHead = (st.histHead - 1 + WF3D_SLICES) % WF3D_SLICES;
+                        const newestSlice = st.history3D[st.histHead];
+                        for (let i = 0; i < WF_BINS; i++) {
+                            const l = i > 0 ? st.smooth3D[i - 1] : st.smooth3D[i];
+                            const c = st.smooth3D[i];
+                            const r = i + 1 < WF_BINS ? st.smooth3D[i + 1] : st.smooth3D[i];
+                            newestSlice[i] = c * 0.60 + (l + r) * 0.20;
+                        }
+                    }
+                    const subShift = st.tick3D / WF3D_STEP_FRAMES;
+                    st.tick3D = (st.tick3D + 1) % WF3D_STEP_FRAMES;
+
+                    // Render 1:1 native-width 2D waterfall scanline (w pixels wide, 1 pixel tall)
+                    const rowPixels = st.rowImg.data;
+                    const binScale = (WF_BINS - 1) / Math.max(1, w - 1);
+
+                    for (let x = 0; x < w; x++) {
+                        const fIdx = x * binScale;
+                        const i0 = fIdx | 0;
+                        const i1 = i0 < WF_BINS - 1 ? i0 + 1 : i0;
+                        const frac = fIdx - i0;
+
+                        const v0 = st.wfDisplay[i0];
+                        const v1 = st.wfDisplay[i1];
+
+                        // Sharp sub-bin interpolation: steep cosine transition + narrow peak profile
+                        const sFrac = frac * frac * (3 - 2 * frac);
+                        let sig = v0 + (v1 - v0) * sFrac;
+
+                        // If only one side is non-zero (edge of a signal or 1-bin peak), tighten the skirt
+                        if (v0 === 0 || v1 === 0) {
+                            sig *= (1.0 - 0.35 * (4.0 * frac * (1.0 - frac)));
+                        }
+
+                        const scaledSig = sig * gain;
+                        const filterVal = (st.filter !== undefined) ? st.filter : 25;
+                        const minFloorThresh = (filterVal === 0) ? 0.35 : Math.min(1.8, 0.4 + (filterVal / 100.0) * 1.4);
+                        let lutIdx;
+                        if (scaledSig <= minFloorThresh) {
+                            // 1x1 native hardware pixel dark SDR background floor (zero blue noise dots!)
+                            lutIdx = (2 + Math.random() * 5) | 0;
+                        } else {
+                            // Smooth soft-knee ramp above minFloorThresh so weak signals emerge cleanly
+                            const eff = scaledSig - minFloorThresh;
+                            const norm = Math.min(1.0, eff / 95.0);
+                            const shaped = Math.pow(norm, 0.72);
+                            const microTex = (Math.random() - 0.5) * 2.2;
+                            lutIdx = Math.min(255, Math.max(10, Math.round(10 + shaped * 245 + microTex)));
+                        }
+
+                        const rgb = wfColorLUT[lutIdx];
+                        const p = x * 4;
+                        rowPixels[p] = rgb[0];
+                        rowPixels[p + 1] = rgb[1];
+                        rowPixels[p + 2] = rgb[2];
+                        rowPixels[p + 3] = 255;
+                    }
+
+                    // Shift 2D waterfall down by 1 exact hardware pixel and insert top scanline
+                    st.offCtx.drawImage(st.offscreen, 0, 0, w, wfH - 1, 0, 1, w, wfH - 1);
+                    st.offCtx.putImageData(st.rowImg, 0, 0);
+
+                    if (!is3D) {
+                        // Draw crisp 475-bin 2D Spectrum (no horizontal spline mush, calm noise floor)
+                        const grad = ctx.createLinearGradient(0, 0, 0, specH);
+                        grad.addColorStop(0, 'rgba(56, 189, 248, 0.42)');
+                        grad.addColorStop(0.65, 'rgba(37, 99, 235, 0.18)');
+                        grad.addColorStop(1, 'rgba(37, 99, 235, 0.02)');
+                        ctx.fillStyle = grad;
+
+                        const usableH = specH - 6 * dpr;
+                        const xStep = w / (WF_BINS - 1);
+
+                        ctx.beginPath();
+                        ctx.moveTo(0, specH);
+                        for (let i = 0; i < WF_BINS; i++) {
+                            const px = i * xStep;
+                            const norm = Math.min(1.0, (st.smoothSpec[i] / 120.0) * gain);
+                            const py = specH - norm * usableH;
+                            ctx.lineTo(px, py);
+                        }
+                        ctx.lineTo(w, specH);
+                        ctx.closePath();
+                        ctx.fill();
+
+                        ctx.strokeStyle = '#7dd3fc';
+                        ctx.lineWidth = Math.max(1.0, 1.05 * dpr);
+                        ctx.lineJoin = 'round';
+                        ctx.beginPath();
+                        for (let i = 0; i < WF_BINS; i++) {
+                            const px = i * xStep;
+                            const norm = Math.min(1.0, (st.smoothSpec[i] / 120.0) * gain);
+                            const py = specH - norm * usableH;
+                            if (i === 0) ctx.moveTo(px, py);
+                            else ctx.lineTo(px, py);
+                        }
+                        ctx.stroke();
+                    } else {
+                        // ==================== YAESU-STYLE 3D SPECTRUM STREAM (3DSS) ====================
+                        const frontY = specH - Math.round(2 * dpr);
+                        const backY = Math.round(26 * dpr);
+                        const backWidth = w * 0.64;
+                        const backLeft = (w - backWidth) * 0.5;
+                        const backRight = w - backLeft;
+                        const maxPeakH = Math.max(22 * dpr, (frontY - backY) * 0.85);
+
+                        // 1. Clean Dark Perspective Stage Floor (no horizontal stripe clutter)
+                        const floorGrad = ctx.createLinearGradient(0, backY, 0, frontY);
+                        floorGrad.addColorStop(0, '#04060b');
+                        floorGrad.addColorStop(1, '#070b14');
+                        ctx.fillStyle = floorGrad;
+                        ctx.beginPath();
+                        ctx.moveTo(0, frontY);
+                        ctx.lineTo(backLeft, backY);
+                        ctx.lineTo(backRight, backY);
+                        ctx.lineTo(w, frontY);
+                        ctx.closePath();
+                        ctx.fill();
+
+                        // Subtle converging perspective frequency lines on the stage floor
+                        ctx.strokeStyle = 'rgba(148, 163, 184, 0.07)';
+                        ctx.lineWidth = 1;
+                        ctx.beginPath();
+                        ctx.moveTo(0, frontY); ctx.lineTo(backLeft, backY);
+                        ctx.moveTo(backLeft, backY); ctx.lineTo(backRight, backY);
+                        ctx.moveTo(w, frontY); ctx.lineTo(backRight, backY);
+                        for (let gx = 1; gx < 10; gx++) {
+                            const t = gx / 10;
+                            ctx.moveTo(t * w, frontY);
+                            ctx.lineTo(backLeft + t * backWidth, backY);
+                        }
+                        ctx.stroke();
+
+                        // 2. Dense Sub-Pixel Surface Slices (140 slices over ~18.5s -> <0.7px spacing, zero horizontal lines)
+                        for (let s = WF3D_SLICES - 1; s >= 0; s--) {
+                            const z = Math.min(1.0, (s + subShift) / WF3D_SLICES);
+                            const baseY = frontY - z * (frontY - backY);
+                            const sliceLeft = z * backLeft;
+                            const sliceWidth = w - 2 * sliceLeft;
+                            const heightScale = maxPeakH * (1.0 - z * 0.36);
+                            const histRow = st.history3D[(st.histHead + s) % WF3D_SLICES];
+
+                            // Only trace polygons around active signals (leaves floor 100% clean)
+                            trace3DSignalIslands(ctx, histRow, sliceLeft, sliceWidth, baseY, heightScale, gain);
+
+                            // Solid opaque elevation gradient fill (no horizontal stroke lines on slices!)
+                            const fade = 1.0 - z * 0.48;
+                            const rRed = Math.round(248 * fade), gRed = Math.round(82 * fade), bRed = Math.round(82 * fade);
+                            const rYel = Math.round(250 * fade), gYel = Math.round(204 * fade), bYel = Math.round(21 * fade);
+                            const rGrn = Math.round(52 * fade),  gGrn = Math.round(211 * fade), bGrn = Math.round(153 * fade);
+                            const rCyn = Math.round(34 * fade),  gCyn = Math.round(211 * fade), bCyn = Math.round(238 * fade);
+                            const rBlu = Math.round(37 * fade),  gBlu = Math.round(99 * fade),  bBlu = Math.round(235 * fade);
+                            const rBas = Math.round(15 * fade),  gBas = Math.round(32 * fade),  bBas = Math.round(78 * fade);
+
+                            const fGrad = ctx.createLinearGradient(0, baseY - heightScale, 0, baseY);
+                            fGrad.addColorStop(0.00, `rgb(${rRed}, ${gRed}, ${bRed})`);
+                            fGrad.addColorStop(0.24, `rgb(${rYel}, ${gYel}, ${bYel})`);
+                            fGrad.addColorStop(0.50, `rgb(${rGrn}, ${gGrn}, ${bGrn})`);
+                            fGrad.addColorStop(0.76, `rgb(${rCyn}, ${gCyn}, ${bCyn})`);
+                            fGrad.addColorStop(0.93, `rgb(${rBlu}, ${gBlu}, ${bBlu})`);
+                            fGrad.addColorStop(1.00, `rgb(${rBas}, ${gBas}, ${bBas})`);
+                            ctx.fillStyle = fGrad;
+                            ctx.fill();
+                        }
+                    }
+                } else {
+                    ctx.fillStyle = '#71717a';
+                    ctx.font = `600 ${Math.round(12 * dpr)}px Segoe UI, sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.fillText(rState.connected ? 'RADIO POWER OFF / STANDBY' : 'DISCONNECTED', w / 2, specH / 2 + 4 * dpr);
+                }
+
+                // Frequency Divider Bar
+                ctx.fillStyle = '#16161b';
+                ctx.fillRect(0, specH, w, scaleH);
+                ctx.strokeStyle = '#27272a';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(0, specH + 0.5); ctx.lineTo(w, specH + 0.5);
+                ctx.moveTo(0, wfTop - 0.5); ctx.lineTo(w, wfTop - 0.5);
+                ctx.stroke();
+
+                // Draw 1:1 Native Resolution Waterfall (zero scaling, zero bilinear blur!)
+                ctx.imageSmoothingEnabled = false;
+                ctx.drawImage(st.offscreen, 0, wfTop);
+
+                // Exact Center Line (Bin 237 of 475 = 50.0%) - hidden in upper 3D Waterfall view
+                const centerX = Math.floor(w / 2) + 0.5;
+                ctx.strokeStyle = 'rgba(239, 68, 68, 0.78)';
+                ctx.lineWidth = Math.max(1, Math.round(dpr));
+                ctx.beginPath();
+                ctx.moveTo(centerX, is3D ? wfTop : 0);
+                ctx.lineTo(centerX, h);
+                ctx.stroke();
+
+                ctx.fillStyle = '#cbd5e1';
+                ctx.font = `600 ${Math.round(10.5 * dpr)}px Consolas, monospace`;
+                ctx.textAlign = 'center';
+                const mhzStr = (rState.taajuus_hz / 1000000).toFixed(4) + ' MHz';
+                ctx.fillText(mhzStr, centerX, specH + Math.round(13 * dpr));
+
+                // Mouse Hover Crosshair & Frequency Preview Tag
+                if (st.hoverFrac !== null && st.hoverFrac !== undefined && st.hoverHz) {
+                    const hx = Math.floor(st.hoverFrac * w) + 0.5;
+                    ctx.strokeStyle = 'rgba(56, 189, 248, 0.8)';
+                    ctx.setLineDash([3 * dpr, 3 * dpr]);
+                    ctx.lineWidth = Math.max(1, Math.round(dpr));
+                    ctx.beginPath();
+                    ctx.moveTo(hx, 0);
+                    ctx.lineTo(hx, h);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+
+                    const hMhzStr = (st.hoverHz / 1000000).toFixed(4) + ' MHz';
+                    ctx.font = `700 ${Math.round(10 * dpr)}px Consolas, monospace`;
+                    const tw = ctx.measureText(hMhzStr).width;
+                    const pillW = tw + 12 * dpr;
+                    const pillH = 17 * dpr;
+                    const pillX = Math.max(4 * dpr, Math.min(w - pillW - 4 * dpr, hx - pillW / 2));
+                    const pillY = 4 * dpr;
+
+                    ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+                    ctx.strokeStyle = 'rgba(56, 189, 248, 0.7)';
+                    ctx.lineWidth = 1;
+                    ctx.fillRect(pillX, pillY, pillW, pillH);
+                    ctx.strokeRect(pillX, pillY, pillW, pillH);
+
+                    ctx.fillStyle = '#38bdf8';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(hMhzStr, pillX + pillW / 2, pillY + 12 * dpr);
+                }
+            });
+        }
+        setInterval(renderWaterfallsLoop, 33);
+
+        // ==================== UI STATE RENDERING ====================
+        function detectBandName(model9700, hz) {
+            const mhz = hz / 1000000;
+            if (!model9700) {
+                if (mhz >= 1.8 && mhz <= 2.0) return '160m';
+                if (mhz >= 3.5 && mhz <= 3.85) return '80m';
+                if (mhz >= 5.25 && mhz <= 5.45) return '60m';
+                if (mhz >= 7.0 && mhz <= 7.3) return '40m';
+                if (mhz >= 10.1 && mhz <= 10.15) return '30m';
+                if (mhz >= 14.0 && mhz <= 14.35) return '20m';
+                if (mhz >= 18.06 && mhz <= 18.17) return '17m';
+                if (mhz >= 21.0 && mhz <= 21.45) return '15m';
+                if (mhz >= 24.89 && mhz <= 24.99) return '12m';
+                if (mhz >= 28.0 && mhz <= 29.7) return '10m';
+                if (mhz >= 50.0 && mhz <= 54.0) return '6m';
+                if (mhz >= 70.0 && mhz <= 70.5) return '4m';
+                return '';
+            } else {
+                if (mhz >= 144.0 && mhz <= 148.0) return '2m';
+                if (mhz >= 430.0 && mhz <= 440.0) return '70cm';
+                if (mhz >= 1240.0 && mhz <= 1300.0) return '23cm';
+                return '';
+            }
+        }
+
+        function renderRadioState(rid) {
+            const st = radioState[rid];
+            const deck = document.getElementById(`deck-${rid}`);
+            const statusBadge = document.getElementById(`status-${rid}`);
+            const connBtn = document.getElementById(`conn-btn-${rid}`);
+            const pwrBtn = document.getElementById(`radio-pwr-btn-${rid}`);
+            const model9700 = isIc9700(rid);
+
+            // Auto-detected radio model name (without "Radio 1" or "Radio 2")
+            document.getElementById(`title-${rid}`).textContent = st.model || (rid === '2' ? 'IC-9700' : 'IC-7300');
+            applyDeckVisibility();
+
+            statusBadge.classList.remove('online', 'standby', 'offline');
+            if (st.online) {
+                statusBadge.classList.add('online');
+                statusBadge.textContent = 'ONLINE';
+                pwrBtn.textContent = 'Power OFF';
+                pwrBtn.className = 'btn btn-pwr-off';
+            } else if (st.connected) {
+                statusBadge.classList.add('standby');
+                statusBadge.textContent = 'STANDBY';
+                pwrBtn.textContent = 'Power ON';
+                pwrBtn.className = 'btn btn-pwr-on';
+            } else {
+                statusBadge.classList.add('offline');
+                statusBadge.textContent = 'OFFLINE';
+                pwrBtn.textContent = 'Power ON';
+                pwrBtn.className = 'btn btn-pwr-on';
+            }
+
+            if (st.connected) {
+                connBtn.textContent = 'Disconnect';
+                connBtn.className = 'btn btn-stop';
+            } else {
+                connBtn.textContent = 'Connect';
+                connBtn.className = 'btn btn-start';
+            }
+
+            // Toggle layout automatically based on detected radio model (IC-7300 vs IC-9700)
+            const dashEl = document.getElementById(`dash-${rid}`);
+            const singleVfoEl = document.getElementById(`single-vfo-${rid}`);
+            const dualVfoEl = document.getElementById(`dual-vfo-${rid}`);
+            const bandsHfEl = document.getElementById(`bands-hf-${rid}`);
+            const bandsVhfEl = document.getElementById(`bands-vhf-${rid}`);
+            const atuBtnEl = document.getElementById(`atu-btn-${rid}`);
+            const dvBtnEl = document.getElementById(`dv-btn-${rid}`);
+
+            dashEl.classList.toggle('ic9700-dash', model9700);
+            singleVfoEl.style.display = model9700 ? 'none' : 'flex';
+            dualVfoEl.style.display = model9700 ? 'grid' : 'none';
+            bandsHfEl.style.display = model9700 ? 'none' : 'flex';
+            bandsVhfEl.style.display = model9700 ? 'flex' : 'none';
+            if (atuBtnEl) atuBtnEl.style.display = model9700 ? 'none' : 'inline-block';
+            if (dvBtnEl) dvBtnEl.style.display = model9700 ? 'inline-block' : 'none';
+
+            const topScopeLabel = (wfState[rid] && wfState[rid].topMode === '3d') ? '3D Waterfall & Waterfall' : 'Spectrum & Waterfall';
+
+            if (!model9700) {
+                updateVfoDigits(`vfo-digits-${rid}`, st.taajuus_hz, 9);
+                document.getElementById(`vfo-badge-${rid}`).textContent = `${st.mode} | FIL${st.filter || 1}`;
+                document.getElementById(`smeter-lbl-${rid}`).textContent = 'S-Meter';
+                document.getElementById(`wf-band-badge-${rid}`).textContent = topScopeLabel;
+            } else {
+                const mainHz = st.main_hz || st.taajuus_hz || 145500000;
+                const subHz = st.sub_hz || 433500000;
+                updateVfoDigits(`vfo-digits-${rid}-main`, mainHz, 10);
+                updateVfoDigits(`vfo-digits-${rid}-sub`, subHz, 10);
+
+                document.getElementById(`vfo-badge-${rid}-main`).textContent = `${st.main_mode || st.mode} | FIL${st.main_filter || 1}`;
+                document.getElementById(`vfo-badge-${rid}-sub`).textContent = `${st.sub_mode || 'FM'} | FIL${st.sub_filter || 1}`;
+
+                const mainCard = document.getElementById(`vfo-card-${rid}-main`);
+                const subCard = document.getElementById(`vfo-card-${rid}-sub`);
+                const isSubActive = (st.active_band === 1);
+                mainCard.classList.toggle('active-band-card', !isSubActive);
+                subCard.classList.toggle('active-band-card', isSubActive);
+                subCard.classList.toggle('inactive-sub', !st.dual_rx);
+
+                const dualBtn = document.getElementById(`dual-rx-btn-${rid}`);
+                const dualTxt = document.getElementById(`dual-rx-txt-${rid}`);
+                dualBtn.classList.toggle('active', !!st.dual_rx);
+                dualTxt.textContent = st.dual_rx ? 'ON' : 'OFF';
+
+                document.getElementById(`smeter-lbl-${rid}`).textContent = isSubActive ? 'S-Meter (SUB)' : 'S-Meter (MAIN)';
+                document.getElementById(`wf-band-badge-${rid}`).textContent = isSubActive ? `${topScopeLabel} (SUB VFO)` : `${topScopeLabel} (MAIN VFO)`;
+            }
+
+            // Calibrated S-Meter bar using clip-path so gradient stays fixed to the track scale (S9 = 60%)
+            document.getElementById(`smeter-txt-${rid}`).textContent = st.smeter || 'S0';
+            const sPct = Math.max(0, Math.min(100, st.smeter_pct || 0));
+            document.getElementById(`smeter-bar-${rid}`).style.clipPath = `inset(0 ${(100 - sPct).toFixed(2)}% 0 0)`;
+
+            if (st.power_pct !== undefined && Date.now() >= (powerDragUntil[rid] || 0)) {
+                const pwrSlider = document.getElementById(`pwr-${rid}`);
+                const pwrVal = document.getElementById(`pwr-val-${rid}`);
+                if (pwrSlider) pwrSlider.value = st.power_pct;
+                if (pwrVal) pwrVal.textContent = `${st.power_pct}%`;
+            }
+
+            if (st.sql_pct !== undefined && Date.now() >= (sqlDragUntil[rid] || 0)) {
+                const sqlSlider = document.getElementById(`sql-${rid}`);
+                if (sqlSlider) sqlSlider.value = st.sql_pct;
+            }
+            updateSquelchUI(rid);
+
+            const activeBandName = detectBandName(model9700, st.taajuus_hz);
+            const bandGroupSel = model9700 ? `#bands-vhf-${rid} .chip-btn` : `#bands-hf-${rid} .chip-btn`;
+            document.querySelectorAll(bandGroupSel).forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.band === activeBandName);
+            });
+
+            const baseMode = (st.mode || 'USB').split('-')[0];
+            const isData = (st.mode || '').includes('-D') || !!st.data_on;
+            document.querySelectorAll(`#modes-${rid} .chip-btn[data-mode]`).forEach(btn => {
+                btn.classList.toggle('mode-active', btn.dataset.mode === baseMode);
+            });
+            const dataBtn = document.getElementById(`data-btn-${rid}`);
+            if (dataBtn) dataBtn.classList.toggle('active', isData);
+
+            document.querySelectorAll(`#filters-${rid} .chip-btn`).forEach(btn => {
+                btn.classList.toggle('fil-active', parseInt(btn.dataset.fil, 10) === (st.filter || 1));
+            });
+
+            const pttBtn = document.getElementById(`ptt-btn-${rid}`);
+            const isTx = (st.ptt === 1);
+            pttBtn.classList.toggle('tx-active', isTx);
+            deck.classList.toggle('tx-deck', isTx);
+            pttBtn.textContent = isTx ? 'TRANSMITTING (TX) — Release to Stop' : 'Hold to Transmit (PTT)';
+            if (typeof updateBookmarksBadge === 'function') updateBookmarksBadge();
+        }
+
+        // ==================== COMMANDS ====================
+        const powerDragUntil = { '1': 0, '2': 0 };
+        const sqlDragUntil = { '1': 0, '2': 0 };
+        const sqlAutoStartLock = { '1': false, '2': false };
+        const sqlManualStopped = { '1': false, '2': false };
+
+        function formatSquelchLabel(pct) {
+            const p = Math.max(0, Math.min(100, Math.round(pct || 0)));
+            if (p <= 0) return 'OFF';
+            if (p <= 60) {
+                const sUnit = Math.max(1, Math.min(9, Math.round((p / 60) * 9)));
+                return `S${sUnit}`;
+            }
+            const db = Math.max(1, Math.round(((p - 60) / 40) * 60));
+            return `+${db}dB`;
+        }
+
+        function updateSquelchUI(rid) {
+            const st = radioState[rid];
+            if (!st) return;
+            const sqlPct = Math.max(0, Math.min(100, parseInt(st.sql_pct || 0, 10)));
+            const sPct = Math.max(0, Math.min(100, parseFloat(st.smeter_pct || 0)));
+            const isOpen = (sqlPct <= 0) || (sPct >= sqlPct);
+
+            const marker = document.getElementById(`smeter-sql-marker-${rid}`);
+            if (marker) {
+                if (sqlPct <= 0) {
+                    marker.style.display = 'none';
+                } else {
+                    marker.style.display = 'block';
+                    marker.style.left = `${sqlPct}%`;
+                    marker.classList.toggle('sql-open', isOpen);
+                }
+            }
+
+            const sqlValEl = document.getElementById(`sql-val-${rid}`);
+            if (sqlValEl) {
+                sqlValEl.textContent = formatSquelchLabel(sqlPct);
+                sqlValEl.classList.toggle('sql-armed', sqlPct > 0 && !isOpen);
+                sqlValEl.classList.toggle('sql-open', sqlPct > 0 && isOpen);
+            }
+
+            // Automatically start audio stream if squelch is set, signal exceeds threshold, and RX device is selected
+            if (sqlPct > 0 && isOpen && !audioActive[rid] && !sqlAutoStartLock[rid] && !sqlManualStopped[rid]) {
+                const rxSel = document.getElementById(`aud-rx-${rid}`);
+                if (rxSel && rxSel.value !== '') {
+                    sqlAutoStartLock[rid] = true;
+                    startAudioForRadio(rid).finally(() => {
+                        setTimeout(() => { sqlAutoStartLock[rid] = false; }, 1500);
+                    });
+                }
+            }
+        }
+
+        function onSquelchSlide(rid, val) {
+            sqlDragUntil[rid] = Date.now() + 600;
+            sqlManualStopped[rid] = false;
+            const pct = Math.max(0, Math.min(100, parseInt(val, 10) || 0));
+            radioState[rid].sql_pct = pct;
+            updateSquelchUI(rid);
+            fetch('/api/squelch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ radio_id: rid, sql_pct: pct })
+            }).catch(() => {});
+        }
+
+        function onSmeterTrackClick(evt, rid) {
+            const track = document.getElementById(`smeter-track-${rid}`);
+            if (!track) return;
+            const rect = track.getBoundingClientRect();
+            if (rect.width <= 0) return;
+            const rawPct = ((evt.clientX - rect.left) / rect.width) * 100;
+            const pct = rawPct < 2 ? 0 : Math.max(0, Math.min(100, Math.round(rawPct)));
+            const slider = document.getElementById(`sql-${rid}`);
+            if (slider) slider.value = pct;
+            onSquelchSlide(rid, pct);
+        }
+
+        async function sendCmd(rid, payload) {
+            try {
+                await fetch('/api/cmd', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ radio_id: rid, ...payload })
+                });
+            } catch (e) {}
+        }
+
+        async function toggleRadioPower(rid) {
+            const st = radioState[rid];
+            const wantOn = !st.online;
+            const port = document.getElementById(`port-${rid}`).value;
+            const baud = document.getElementById(`baud-${rid}`).value;
+            // Optimistic UI update when turning power OFF so button flips to Power ON immediately
+            if (!wantOn) {
+                st.online = false;
+                st.ptt = 0;
+                st.smeter = 'S0';
+                st.smeter_pct = 0;
+                renderRadioState(rid);
+            }
+            await sendCmd(rid, {
+                type: 'radio_power',
+                power: wantOn,
+                port: port,
+                baud: baud
+            });
+        }
+
+        function selectFreqBand(rid, hz, defaultMode) {
+            radioState[rid].taajuus_hz = hz;
+            if (isIc9700(rid)) {
+                if (radioState[rid].active_band === 1) radioState[rid].sub_hz = hz;
+                else radioState[rid].main_hz = hz;
+            }
+            renderRadioState(rid);
+            sendCmd(rid, { type: 'taajuus', hz: hz });
+            if (defaultMode && radioState[rid].mode.split('-')[0] !== defaultMode) {
+                setMode(rid, defaultMode);
+            }
+        }
+
+        function setMode(rid, baseMode) {
+            const isData = radioState[rid].data_on && ['LSB', 'USB', 'FM'].includes(baseMode);
+            const fullMode = isData ? `${baseMode}-D` : baseMode;
+            radioState[rid].mode = fullMode;
+            renderRadioState(rid);
+            sendCmd(rid, { type: 'mode', mode: fullMode, filter: radioState[rid].filter || 1 });
+        }
+
+        function toggleDataMode(rid) {
+            const baseMode = (radioState[rid].mode || 'USB').split('-')[0];
+            if (!['LSB', 'USB', 'FM'].includes(baseMode)) return;
+            radioState[rid].data_on = !radioState[rid].data_on;
+            const fullMode = radioState[rid].data_on ? `${baseMode}-D` : baseMode;
+            radioState[rid].mode = fullMode;
+            renderRadioState(rid);
+            sendCmd(rid, { type: 'mode', mode: fullMode, filter: radioState[rid].filter || 1 });
+        }
+
+        function setFilter(rid, fil) {
+            radioState[rid].filter = fil;
+            renderRadioState(rid);
+            sendCmd(rid, { type: 'mode', mode: radioState[rid].mode || 'USB', filter: fil });
+        }
+
+        function onPowerSlide(rid, val) {
+            powerDragUntil[rid] = Date.now() + 600;
+            radioState[rid].power_pct = parseInt(val, 10);
+            document.getElementById(`pwr-val-${rid}`).textContent = `${val}%`;
+            sendCmd(rid, { type: 'teho', teho: parseFloat(val) / 100.0 });
+        }
+
+        function setPtt(rid, pttVal) {
+            radioState[rid].ptt = pttVal;
+            renderRadioState(rid);
+            sendCmd(rid, { type: 'ptt', ptt: pttVal });
+        }
+
+        // ==================== DUAL RX (MAIN / SUB VFO) ====================
+        function selectDualBand(rid, which) {
+            const wantSub = (which === 'sub');
+            if (wantSub && !radioState[rid].dual_rx) {
+                radioState[rid].dual_rx = 1;
+            }
+            radioState[rid].active_band = wantSub ? 1 : 0;
+            radioState[rid].taajuus_hz = wantSub ? radioState[rid].sub_hz : radioState[rid].main_hz;
+            radioState[rid].mode = wantSub ? radioState[rid].sub_mode : radioState[rid].main_mode;
+            radioState[rid].filter = wantSub ? radioState[rid].sub_filter : radioState[rid].main_filter;
+            renderRadioState(rid);
+            sendCmd(rid, { type: 'select_band', band: which });
+        }
+
+        function setDualBandFreq(rid, which, hz, mode) {
+            const wantSub = (which === 'sub');
+            if (wantSub) {
+                radioState[rid].dual_rx = 1;
+                radioState[rid].active_band = 1;
+                radioState[rid].sub_hz = hz;
+                radioState[rid].sub_mode = mode;
+            } else {
+                radioState[rid].active_band = 0;
+                radioState[rid].main_hz = hz;
+                radioState[rid].main_mode = mode;
+            }
+            radioState[rid].taajuus_hz = hz;
+            radioState[rid].mode = mode;
+            renderRadioState(rid);
+            sendCmd(rid, { type: 'taajuus', hz: hz, vfo: which });
+            setTimeout(() => sendCmd(rid, { type: 'mode', mode: mode, filter: 1 }), 70);
+        }
+
+        function toggleDualRx(rid) {
+            const nextVal = radioState[rid].dual_rx ? 0 : 1;
+            radioState[rid].dual_rx = nextVal;
+            if (!nextVal && radioState[rid].active_band === 1) {
+                radioState[rid].active_band = 0;
+                radioState[rid].taajuus_hz = radioState[rid].main_hz;
+            }
+            renderRadioState(rid);
+            sendCmd(rid, { type: 'dual_rx', dual_rx: nextVal });
+        }
+
+        function swapMainSub(rid) {
+            const st = radioState[rid];
+            const tmpHz = st.main_hz; st.main_hz = st.sub_hz; st.sub_hz = tmpHz;
+            const tmpMode = st.main_mode; st.main_mode = st.sub_mode; st.sub_mode = tmpMode;
+            const tmpFil = st.main_filter; st.main_filter = st.sub_filter; st.sub_filter = tmpFil;
+            st.taajuus_hz = (st.active_band === 1) ? st.sub_hz : st.main_hz;
+            renderRadioState(rid);
+            sendCmd(rid, { type: 'swap_bands' });
+        }
+
+        // ==================== KEYBOARD PTT BINDING ====================
+        const JS_TO_WIN_VK = {
+            'Space': 0x20, 'Enter': 0x0D, 'Tab': 0x09, 'Backquote': 0xC0,
+            'ControlLeft': 0xA2, 'ControlRight': 0xA3, 'ShiftLeft': 0xA0, 'ShiftRight': 0xA1,
+            'AltLeft': 0xA4, 'AltRight': 0xA5, 'CapsLock': 0x14, 'Pause': 0x13, 'ScrollLock': 0x91,
+            'Insert': 0x2D, 'Delete': 0x2E, 'Home': 0x24, 'End': 0x23, 'PageUp': 0x21, 'PageDown': 0x22,
+            'Numpad0': 0x60, 'Numpad1': 0x61, 'Numpad2': 0x62, 'Numpad3': 0x63, 'Numpad4': 0x64,
+            'Numpad5': 0x65, 'Numpad6': 0x66, 'Numpad7': 0x67, 'Numpad8': 0x68, 'Numpad9': 0x69,
+            'NumpadAdd': 0x6B, 'NumpadSubtract': 0x6D, 'NumpadMultiply': 0x6A, 'NumpadDivide': 0x6F, 'NumpadDecimal': 0x6E
+        };
+
+        function mapEventToVk(e) {
+            if (JS_TO_WIN_VK[e.code]) return JS_TO_WIN_VK[e.code];
+            if (e.code.startsWith('F') && e.code.length <= 3) {
+                const fn = parseInt(e.code.slice(1), 10);
+                if (fn >= 1 && fn <= 24) return 0x70 + (fn - 1);
+            }
+            if (e.code.startsWith('Key') && e.code.length === 4) return e.code.charCodeAt(3);
+            if (e.code.startsWith('Digit') && e.code.length === 6) return e.code.charCodeAt(5);
+            return e.keyCode || 0;
+        }
+
+        function startKeyBind(rid) {
+            const st = keyBindState[rid];
+            st.listening = !st.listening;
+            const btn = document.getElementById(`key-btn-${rid}`);
+            const span = document.getElementById(`key-name-${rid}`);
+            if (st.listening) {
+                btn.classList.add('binding');
+                span.textContent = 'Press key (Esc to clear)...';
+            } else {
+                btn.classList.remove('binding');
+                span.textContent = st.name;
+            }
+        }
+
+        async function saveKeyConfig(rid) {
+            const st = keyBindState[rid];
+            document.getElementById(`key-name-${rid}`).textContent = st.name;
+            document.getElementById(`global-btn-${rid}`).classList.toggle('checked', st.global);
+            await fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    radio_id: rid,
+                    ptt_key_code: st.code,
+                    ptt_key_name: st.name,
+                    ptt_global: st.global
+                })
+            });
+        }
+
+        function toggleGlobalPtt(rid) {
+            keyBindState[rid].global = !keyBindState[rid].global;
+            saveKeyConfig(rid);
+        }
+
+        window.addEventListener('keydown', (e) => {
+            for (const rid of ['1', '2']) {
+                if (keyBindState[rid].listening) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    keyBindState[rid].listening = false;
+                    document.getElementById(`key-btn-${rid}`).classList.remove('binding');
+                    if (e.code === 'Escape') {
+                        keyBindState[rid].code = 0;
+                        keyBindState[rid].name = 'None';
+                    } else {
+                        keyBindState[rid].code = mapEventToVk(e);
+                        keyBindState[rid].name = e.code.replace('Key', '').replace('Digit', '');
+                    }
+                    saveKeyConfig(rid);
+                    return;
+                }
+            }
+        });
+
+        // ==================== SERIAL PORTS & AUDIO I/O ====================
+        async function refreshPorts() {
+            try {
+                const res = await fetch('/api/ports');
+                const data = await res.json();
+                if (data.web_url) {
+                    document.getElementById('mobile-url-label').textContent = data.web_url;
+                }
+                ['1', '2'].forEach(rid => {
+                    const sel = document.getElementById(`port-${rid}`);
+                    const rconf = (data.config && data.config.radios && data.config.radios[rid]) || {};
+                    const currentVal = sel.value || rconf.port || '';
+                    sel.innerHTML = '<option value="">None</option>';
+                    (data.port_details || []).forEach(p => {
+                        const opt = document.createElement('option');
+                        opt.value = p.device;
+                        opt.textContent = p.device;
+                        opt.title = p.description;
+                        sel.appendChild(opt);
+                    });
+                    if (currentVal) sel.value = currentVal;
+                    if (rconf.baud) document.getElementById(`baud-${rid}`).value = String(rconf.baud);
+                    if (rconf.ptt_key_code !== undefined) {
+                        keyBindState[rid].code = rconf.ptt_key_code;
+                        const kName = (!rconf.ptt_key_name || rconf.ptt_key_name === 'Ei asetettu') ? 'None' : rconf.ptt_key_name;
+                        keyBindState[rid].name = kName;
+                        keyBindState[rid].global = !!rconf.ptt_global;
+                        document.getElementById(`key-name-${rid}`).textContent = keyBindState[rid].name;
+                        document.getElementById(`global-btn-${rid}`).classList.toggle('checked', keyBindState[rid].global);
+                    }
+                    if (data.states && data.states[rid]) {
+                        Object.assign(radioState[rid], data.states[rid]);
+                        renderRadioState(rid);
+                    }
+                });
+            } catch (e) {}
+        }
+
+        async function toggleConnect(rid) {
+            const st = radioState[rid];
+            if (st.connected) {
+                await fetch('/api/disconnect', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ radio_id: rid })
+                });
+            } else {
+                const port = document.getElementById(`port-${rid}`).value;
+                const baud = document.getElementById(`baud-${rid}`).value;
+                await fetch('/api/connect', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ radio_id: rid, port, baud })
+                });
+            }
+        }
+
+        async function loadAudioDevices() {
+            try {
+                const res = await fetch('/api/audio_devices');
+                const data = await res.json();
+                ['1', '2'].forEach(rid => {
+                    const rconf = (data.config && data.config[rid]) || {};
+                    const rxSel = document.getElementById(`aud-rx-${rid}`);
+                    const txSel = document.getElementById(`aud-tx-${rid}`);
+                    const spkSel = document.getElementById(`aud-spk-${rid}`);
+                    const micSel = document.getElementById(`aud-mic-${rid}`);
+
+                    const fillSelect = (sel, list, placeholder, savedVal) => {
+                        sel.innerHTML = `<option value="">${placeholder}</option>`;
+                        list.forEach(item => {
+                            const opt = document.createElement('option');
+                            opt.value = item.id;
+                            opt.textContent = `${item.id}: ${item.label}`;
+                            sel.appendChild(opt);
+                        });
+                        if (savedVal !== undefined && savedVal !== null && String(savedVal) !== '') {
+                            sel.value = String(savedVal);
+                        }
+                    };
+
+                    fillSelect(rxSel, data.inputs || [], 'Disabled', rconf.audio_rx_dev);
+                    fillSelect(txSel, data.outputs || [], 'Disabled', rconf.audio_tx_dev);
+                    fillSelect(spkSel, data.outputs || [], 'Disabled', rconf.audio_spk_dev);
+                    fillSelect(micSel, data.inputs || [], 'Disabled', rconf.audio_mic_dev);
+
+                    if (rconf.audio_rx_vol !== undefined) {
+                        document.getElementById(`aud-vol-${rid}`).value = rconf.audio_rx_vol;
+                        document.getElementById(`aud-vol-txt-${rid}`).textContent = `${rconf.audio_rx_vol}%`;
+                    }
+
+                    if (rconf.sql_pct !== undefined) {
+                        radioState[rid].sql_pct = parseInt(rconf.sql_pct, 10) || 0;
+                        const sqlSlider = document.getElementById(`sql-${rid}`);
+                        if (sqlSlider) sqlSlider.value = radioState[rid].sql_pct;
+                        updateSquelchUI(rid);
+                    }
+
+                    audioActive[rid] = !!(data.active && data.active[rid]);
+                    updateAudioBtn(rid);
+                });
+            } catch (e) {}
+        }
+
+        function updateAudioBtn(rid) {
+            const btn = document.getElementById(`aud-btn-${rid}`);
+            if (audioActive[rid]) {
+                btn.textContent = 'Stop Audio';
+                btn.className = 'btn btn-stop';
+            } else {
+                btn.textContent = 'Start Audio';
+                btn.className = 'btn btn-start';
+            }
+        }
+
+        async function toggleAudio(rid) {
+            if (audioActive[rid]) {
+                sqlManualStopped[rid] = true;
+                await fetch('/api/audio_stop', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ radio_id: rid, local_only: true })
+                });
+                audioActive[rid] = false;
+                updateAudioBtn(rid);
+            } else {
+                sqlManualStopped[rid] = false;
+                await startAudioForRadio(rid);
+            }
+        }
+
+        async function startAudioForRadio(rid) {
+            const rx = document.getElementById(`aud-rx-${rid}`).value;
+            const tx = document.getElementById(`aud-tx-${rid}`).value;
+            const spk = document.getElementById(`aud-spk-${rid}`).value;
+            const mic = document.getElementById(`aud-mic-${rid}`).value;
+            const vol = document.getElementById(`aud-vol-${rid}`).value;
+            const res = await fetch('/api/audio_start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ radio_id: rid, rx, tx, spk, mic, vol, local: true })
+            });
+            const d = await res.json();
+            audioActive[rid] = !!d.active;
+            updateAudioBtn(rid);
+        }
+
+        // ==================== PER-RADIO AUDIO RECORDING (REC / STOP REC) ====================
+        function formatRecTime(sec) {
+            const m = Math.floor(sec / 60).toString().padStart(2, '0');
+            const s = Math.floor(sec % 60).toString().padStart(2, '0');
+            return `${m}:${s}`;
+        }
+
+        function updateRecBtnLabel(rid) {
+            const btn = document.getElementById(`rec-btn-${rid}`);
+            const rs = recState[rid];
+            if (!btn) return;
+            if (rs.recording) {
+                const elapsed = Math.max(0, Math.floor((Date.now() - rs.startTime) / 1000));
+                btn.textContent = `Stop REC (${formatRecTime(elapsed)})`;
+                btn.className = 'btn btn-rec-active';
+            } else {
+                btn.textContent = 'REC';
+                btn.className = 'btn btn-rec';
+            }
+        }
+
+        async function toggleRecord(rid) {
+            const rs = recState[rid];
+            const btn = document.getElementById(`rec-btn-${rid}`);
+            if (!rs.recording) {
+                const rx = document.getElementById(`aud-rx-${rid}`).value;
+                const vol = document.getElementById(`aud-vol-${rid}`).value;
+                rs.recording = true;
+                rs.startTime = Date.now();
+                updateRecBtnLabel(rid);
+                if (rs.timer) clearInterval(rs.timer);
+                rs.timer = setInterval(() => updateRecBtnLabel(rid), 500);
+
+                try {
+                    const res = await fetch('/api/rec_start', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ radio_id: rid, rx, vol })
+                    });
+                    const d = await res.json();
+                    if (d.status !== 'ok') {
+                        rs.recording = false;
+                        if (rs.timer) clearInterval(rs.timer);
+                        updateRecBtnLabel(rid);
+                    }
+                } catch (e) {
+                    rs.recording = false;
+                    if (rs.timer) clearInterval(rs.timer);
+                    updateRecBtnLabel(rid);
+                }
+            } else {
+                rs.recording = false;
+                if (rs.timer) {
+                    clearInterval(rs.timer);
+                    rs.timer = null;
+                }
+                if (btn) {
+                    btn.textContent = 'Saving...';
+                    btn.className = 'btn btn-rec';
+                }
+                try {
+                    await fetch('/api/rec_stop', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ radio_id: rid })
+                    });
+                } catch (e) {}
+                updateRecBtnLabel(rid);
+            }
+        }
+
+        function onAudioDeviceChange(rid) {
+            if (audioActive[rid]) {
+                startAudioForRadio(rid);
+            } else {
+                const rx = document.getElementById(`aud-rx-${rid}`).value;
+                const tx = document.getElementById(`aud-tx-${rid}`).value;
+                const spk = document.getElementById(`aud-spk-${rid}`).value;
+                const mic = document.getElementById(`aud-mic-${rid}`).value;
+                fetch('/api/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        radio_id: rid,
+                        audio_rx_dev: rx, audio_tx_dev: tx, audio_spk_dev: spk, audio_mic_dev: mic
+                    })
+                });
+            }
+        }
+
+        function onVolumeSlide(rid, val) {
+            document.getElementById(`aud-vol-txt-${rid}`).textContent = `${val}%`;
+            fetch('/api/audio_volume', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ radio_id: rid, vol: parseFloat(val) })
+            });
+        }
+
+        // ==================== BOOKMARKS ====================
+        const DEFAULT_BOOKMARKS = [
+            { id: 'bm_1', name: '80m FT8', hz: 3573000, mode: 'USB-D', radio_id: '1' },
+            { id: 'bm_2', name: '80m Voice Net', hz: 3699000, mode: 'LSB', radio_id: '1' },
+            { id: 'bm_3', name: '40m FT8', hz: 7074000, mode: 'USB-D', radio_id: '1' },
+            { id: 'bm_4', name: '20m FT8', hz: 14074000, mode: 'USB-D', radio_id: '1' },
+            { id: 'bm_5', name: '2m FT8', hz: 144174000, mode: 'USB-D', radio_id: '2' },
+            { id: 'bm_6', name: '2m FM Calling', hz: 145500000, mode: 'FM', radio_id: '2' },
+            { id: 'bm_7', name: '70cm FM Calling', hz: 433500000, mode: 'FM', radio_id: '2' }
+        ];
+
+        let bookmarks = [];
+
+        function loadBookmarks() {
+            try {
+                const raw = localStorage.getItem('icom_bookmarks_v1');
+                if (raw) {
+                    bookmarks = JSON.parse(raw);
+                    // Migrate legacy names to English if present
+                    bookmarks.forEach(b => {
+                        if (b.name === 'Suomi-rinki 80m') b.name = '80m Voice Net';
+                        if (b.name === '2m FM Kutsu') b.name = '2m FM Calling';
+                        if (b.name === '70cm FM Kutsu') b.name = '70cm FM Calling';
+                    });
+                } else {
+                    bookmarks = DEFAULT_BOOKMARKS.slice();
+                    saveBookmarks();
+                }
+            } catch (e) {
+                bookmarks = DEFAULT_BOOKMARKS.slice();
+            }
+            updateBookmarksBadge();
+        }
+
+        function saveBookmarks() {
+            try {
+                localStorage.setItem('icom_bookmarks_v1', JSON.stringify(bookmarks));
+            } catch (e) {}
+            updateBookmarksBadge();
+        }
+
+        function updateBookmarksBadge() {
+            const count = (bookmarks && bookmarks.length) ? bookmarks.length : 0;
+            const b1 = document.getElementById('bm-badge');
+            if (b1) b1.textContent = count;
+            const b2 = document.getElementById('bm-drawer-count');
+            if (b2) b2.textContent = count;
+
+            const hz1 = getActiveVfoHz('1');
+            const hz2 = getActiveVfoHz('2');
+            const qf1 = document.getElementById('bm-qfreq-1');
+            const qf2 = document.getElementById('bm-qfreq-2');
+            if (qf1) qf1.textContent = hz1 ? (hz1 / 1000000).toFixed(3) + ' MHz' : 'OFF';
+            if (qf2) qf2.textContent = hz2 ? (hz2 / 1000000).toFixed(3) + ' MHz' : 'OFF';
+        }
+
+        function toggleBookmarksDrawer(forceOpen) {
+            const drawer = document.getElementById('bm-drawer');
+            const backdrop = document.getElementById('bm-backdrop');
+            if (!drawer || !backdrop) return;
+            const isOpen = drawer.classList.contains('open');
+            const next = (forceOpen !== undefined) ? !!forceOpen : !isOpen;
+            drawer.classList.toggle('open', next);
+            backdrop.classList.toggle('open', next);
+            if (next) {
+                updateBookmarksBadge();
+                renderBookmarksList();
+            }
+        }
+
+        function getActiveVfoHz(rid) {
+            const st = radioState[rid];
+            if (!st) return 0;
+            if (isIc9700(rid)) {
+                return (st.active_band === 1) ? (st.sub_hz || 145000000) : (st.main_hz || 145000000);
+            }
+            return st.vfo_hz || 0;
+        }
+
+        function getActiveMode(rid) {
+            const st = radioState[rid];
+            return (st && st.mode) ? st.mode : 'USB';
+        }
+
+        function quickBookmarkRadio(rid) {
+            const hz = getActiveVfoHz(rid);
+            if (!hz) {
+                alert(`Radio ${rid === '1' ? 'IC-7300' : 'IC-9700'} is powered off or frequency unavailable.`);
+                return;
+            }
+            const mode = getActiveMode(rid);
+            const freqStr = (hz / 1000000).toFixed(3);
+            const defaultName = `${freqStr} MHz ${mode}`;
+            const name = prompt(`Save Bookmark:\nFrequency: ${freqStr} MHz (${mode})\nEnter name or label:`, defaultName);
+            if (name === null) return;
+            const finalName = name.trim() || defaultName;
+
+            const newBm = {
+                id: 'bm_' + Date.now(),
+                name: finalName,
+                hz: hz,
+                mode: mode,
+                radio_id: rid
+            };
+            bookmarks.unshift(newBm);
+            saveBookmarks();
+            renderBookmarksList();
+            showBookmarkToast(`Saved to bookmarks: ${finalName} (${freqStr} MHz)`);
+            toggleBookmarksDrawer(true);
+        }
+
+        function parseFreqInputToHz(str) {
+            if (!str) return 0;
+            const clean = str.trim().replace(',', '.').replace(/[^0-9.]/g, '');
+            const val = parseFloat(clean);
+            if (isNaN(val) || val <= 0) return 0;
+            if (val < 2000) {
+                return Math.round(val * 1000000);
+            } else if (val < 200000) {
+                return Math.round(val * 1000);
+            } else {
+                return Math.round(val);
+            }
+        }
+
+        function saveNewBookmarkFromForm() {
+            const nameInput = document.getElementById('bm-input-name');
+            const freqInput = document.getElementById('bm-input-freq');
+            const modeSelect = document.getElementById('bm-input-mode');
+            const radioSelect = document.getElementById('bm-input-radio');
+
+            const name = nameInput.value.trim();
+            const hz = parseFreqInputToHz(freqInput.value);
+            const mode = modeSelect.value;
+            const radioId = radioSelect.value;
+
+            if (!hz) {
+                alert('Please enter a valid frequency (e.g. 3.573 or 145.500 MHz)!');
+                freqInput.focus();
+                return;
+            }
+
+            const finalName = name || `${(hz / 1000000).toFixed(3)} MHz ${mode}`;
+            const newBm = {
+                id: 'bm_' + Date.now(),
+                name: finalName,
+                hz: hz,
+                mode: mode,
+                radio_id: radioId
+            };
+            bookmarks.unshift(newBm);
+            saveBookmarks();
+            nameInput.value = '';
+            freqInput.value = '';
+            renderBookmarksList();
+            showBookmarkToast(`Saved: ${finalName}`);
+        }
+
+        function deleteBookmark(e, id) {
+            if (e) e.stopPropagation();
+            bookmarks = bookmarks.filter(b => b.id !== id);
+            saveBookmarks();
+            renderBookmarksList();
+        }
+
+        function tuneToBookmark(bm, cardEl) {
+            let rid = bm.radio_id;
+            if (!rid || rid === 'auto') {
+                rid = (bm.hz >= 100000000) ? '2' : '1';
+            }
+            if (!radioState[rid] || !radioState[rid].online) {
+                const other = rid === '1' ? '2' : '1';
+                if (radioState[other] && radioState[other].online) {
+                    rid = other;
+                }
+            }
+
+            applyNewFrequency(rid, bm.hz);
+            if (bm.mode) {
+                setFullMode(rid, bm.mode);
+            }
+
+            if (cardEl) {
+                cardEl.classList.add('tuned');
+                setTimeout(() => cardEl.classList.remove('tuned'), 800);
+            }
+
+            const freqStr = (bm.hz / 1000000).toFixed(3);
+            showBookmarkToast(`Tuned to: ${bm.name} (${freqStr} MHz ${bm.mode || ''})`);
+        }
+
+        function setFullMode(rid, fullMode) {
+            if (!fullMode) return;
+            const isData = fullMode.endsWith('-D');
+            const base = fullMode.replace('-D', '');
+            radioState[rid].data_on = isData;
+            radioState[rid].mode = fullMode;
+            renderRadioState(rid);
+            sendCmd(rid, { type: 'mode', mode: fullMode, filter: radioState[rid].filter || 1 });
+        }
+
+        function renderBookmarksList() {
+            const listEl = document.getElementById('bm-list');
+            if (!listEl) return;
+            const filterText = (document.getElementById('bm-search')?.value || '').toLowerCase().trim();
+
+            const filtered = bookmarks.filter(b => {
+                if (!filterText) return true;
+                const freqStr = (b.hz / 1000000).toFixed(4);
+                return (b.name && b.name.toLowerCase().includes(filterText)) ||
+                       (b.mode && b.mode.toLowerCase().includes(filterText)) ||
+                       freqStr.includes(filterText);
+            });
+
+            if (filtered.length === 0) {
+                listEl.innerHTML = `<div style="text-align:center; padding:24px 12px; color:var(--text-muted); font-size:12px;">
+                    ${bookmarks.length === 0 ? 'No saved bookmarks yet.<br>Add the current frequency above or enter a new one!' : 'No matching bookmarks found.'}
+                </div>`;
+                return;
+            }
+
+            listEl.innerHTML = filtered.map(bm => {
+                const mhz = (bm.hz / 1000000).toFixed(3);
+                const radioLbl = (bm.radio_id === '1') ? 'IC-7300' : (bm.radio_id === '2') ? 'IC-9700' : 'AUTO';
+                const bmJson = JSON.stringify(bm).replace(/"/g, '&quot;');
+                return `
+                <div class="bm-card" onclick="tuneToBookmark(${bmJson}, this)" title="Click to tune radio to this frequency">
+                    <div class="bm-card-info">
+                        <div class="bm-card-name">${escapeHtml(bm.name)}</div>
+                        <div class="bm-card-meta">
+                            <span class="bm-freq-pill">${mhz} MHz</span>
+                            <span class="bm-mode-tag">${bm.mode || 'USB'}</span>
+                            <span class="bm-radio-tag">${radioLbl}</span>
+                        </div>
+                    </div>
+                    <button class="bm-del-btn" onclick="deleteBookmark(event, '${bm.id}')" title="Delete bookmark">✕</button>
+                </div>`;
+            }).join('');
+        }
+
+        let toastTimer = null;
+        function showBookmarkToast(msg) {
+            const toast = document.getElementById('bm-toast');
+            if (!toast) return;
+            toast.textContent = msg;
+            toast.classList.add('show');
+            if (toastTimer) clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => toast.classList.remove('show'), 2200);
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                toggleBookmarksDrawer(false);
+            }
+        });
+
+        // ==================== WEBSOCKET ====================
+        let ws = null;
+        function connectWs() {
+            const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${proto}//${window.location.host}/ws`);
+            ws.onopen = () => {
+                ws.send(JSON.stringify({ type: 'window_focus', focused: document.hasFocus() }));
+            };
+            ws.onmessage = (evt) => {
+                try {
+                    const msg = JSON.parse(evt.data);
+                    if (msg.type === 'tila') {
+                        if (msg.all_states) {
+                            ['1', '2'].forEach(rid => {
+                                if (msg.all_states[rid]) {
+                                    Object.assign(radioState[rid], msg.all_states[rid]);
+                                    renderRadioState(rid);
+                                }
+                            });
+                        } else if (msg.radio_id && msg.state) {
+                            Object.assign(radioState[msg.radio_id], msg.state);
+                            renderRadioState(msg.radio_id);
+                        }
+                    } else if (msg.type === 'scope' && msg.radio_id) {
+                        feedScopeData(String(msg.radio_id), msg.data, msg.span_hz, msg.center_mode, msg.edge_low, msg.edge_high);
+                    }
+                } catch (e) {}
+            };
+            ws.onclose = () => setTimeout(connectWs, 1200);
+        }
+
+        window.addEventListener('focus', () => {
+            if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'window_focus', focused: true }));
+        });
+        window.addEventListener('blur', () => {
+            if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'window_focus', focused: false }));
+        });
+
+        refreshPorts();
+        loadAudioDevices();
+        loadBookmarks();
+        renderBookmarksList();
+        connectWs();
+    </script>
+</body>
+</html>
