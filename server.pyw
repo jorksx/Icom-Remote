@@ -529,9 +529,8 @@ class RadioController:
         self.poller_task = None
         if self.ser and self.ser.is_open:
             try:
+                # Varmistetaan että PTT vapautuu yhteyden katketessa
                 self.ser.write(civ_command(0x1C, 0x00, bytes([0x00]), to_addr=self.radio_addr))
-                self.ser.write(civ_command(0x27, 0x11, bytes([0x00]), to_addr=self.radio_addr))
-                self.ser.write(civ_command(0x27, 0x10, bytes([0x00]), to_addr=self.radio_addr))
                 self.ser.close()
             except Exception:
                 pass
@@ -544,9 +543,8 @@ class RadioController:
         self.state['online'] = False
         if self.ser and self.ser.is_open:
             try:
+                # Varmistetaan että PTT vapautuu yhteyden katketessa
                 self.ser.write(civ_command(0x1C, 0x00, bytes([0x00]), to_addr=self.radio_addr))
-                self.ser.write(civ_command(0x27, 0x11, bytes([0x00]), to_addr=self.radio_addr))
-                self.ser.write(civ_command(0x27, 0x10, bytes([0x00]), to_addr=self.radio_addr))
                 self.ser.close()
             except Exception:
                 pass
