@@ -105,6 +105,15 @@ DEFAULT_CONFIG = {
     "web_pin": "7300",
     "web_pin_enabled": True,
     "web_pin_updated": 1729240000,
+    "bookmarks": [
+        {"id": "bm_1", "name": "80m FT8", "hz": 3573000, "mode": "USB-D", "radio_id": "1"},
+        {"id": "bm_2", "name": "80m Voice Net", "hz": 3699000, "mode": "LSB", "radio_id": "1"},
+        {"id": "bm_3", "name": "40m FT8", "hz": 7074000, "mode": "USB-D", "radio_id": "1"},
+        {"id": "bm_4", "name": "20m FT8", "hz": 14074000, "mode": "USB-D", "radio_id": "1"},
+        {"id": "bm_5", "name": "2m FT8", "hz": 144174000, "mode": "USB-D", "radio_id": "2"},
+        {"id": "bm_6", "name": "2m FM Calling", "hz": 145500000, "mode": "FM", "radio_id": "2"},
+        {"id": "bm_7", "name": "70cm FM Calling", "hz": 433500000, "mode": "FM", "radio_id": "2"}
+    ],
     "radios": {
         "1": {
             "name": "IC-7300",
@@ -124,7 +133,12 @@ DEFAULT_CONFIG = {
             "audio_rx_vol": 100,
             "sql_pct": 0,
             "rigctld_port": 4532,
-            "vcom_port": ""
+            "vcom_port": "",
+            "wf_floor": 0,
+            "wf_gain": 60,
+            "wf_peak": 85,
+            "wf_speed": 2,
+            "wf_mode": "3d"
         },
         "2": {
             "name": "IC-9700",
@@ -144,7 +158,12 @@ DEFAULT_CONFIG = {
             "audio_rx_vol": 100,
             "sql_pct": 0,
             "rigctld_port": 4533,
-            "vcom_port": ""
+            "vcom_port": "",
+            "wf_floor": 0,
+            "wf_gain": 60,
+            "wf_peak": 85,
+            "wf_speed": 2,
+            "wf_mode": "3d"
         }
     }
 }
@@ -169,6 +188,8 @@ def load_config():
             raw["web_pin_enabled"] = DEFAULT_CONFIG["web_pin_enabled"]
         if "web_pin_updated" not in raw:
             raw["web_pin_updated"] = DEFAULT_CONFIG["web_pin_updated"]
+        if "bookmarks" not in raw or not isinstance(raw["bookmarks"], list):
+            raw["bookmarks"] = list(DEFAULT_CONFIG["bookmarks"])
         # Varmistetaan oletuskentät
         for rid in ("1", "2"):
             if rid not in raw["radios"]:
@@ -1785,13 +1806,20 @@ async def api_disconnect(request):
 async def api_config_update(request):
     data = await request.json()
     rid = str(data.get('radio_id', '1'))
+    changed = False
+    if "bookmarks" in data and isinstance(data["bookmarks"], list):
+        global_config["bookmarks"] = data["bookmarks"]
+        changed = True
     if rid in global_config["radios"]:
         for key in ("port", "baud", "vfo_offset", "ptt_key_code", "ptt_key_name", "ptt_global",
-                    "audio_rx_dev", "audio_tx_dev", "audio_spk_dev", "audio_mic_dev", "audio_rx_vol"):
+                    "audio_rx_dev", "audio_tx_dev", "audio_spk_dev", "audio_mic_dev", "audio_rx_vol",
+                    "wf_floor", "wf_gain", "wf_peak", "wf_speed", "wf_mode"):
             if key in data:
                 global_config["radios"][rid][key] = data[key]
+                changed = True
+    if changed:
         save_config(global_config)
-    return web.json_response({"status": "ok", "config": global_config["radios"].get(rid, {})})
+    return web.json_response({"status": "ok", "config": global_config["radios"].get(rid, {}), "bookmarks": global_config.get("bookmarks", [])})
 
 
 async def api_shutdown(request):
@@ -2493,4 +2521,6 @@ if __name__ == '__main__':
         os._exit(0)
 
     win.events.closed += on_closed
-    webview.start()
+    storage_path = os.path.join(BASE_DIR, 'webview_data')
+    os.makedirs(storage_path, exist_ok=True)
+    webview.start(private_mode=False, storage_path=storage_path)

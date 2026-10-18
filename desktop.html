@@ -2152,52 +2152,86 @@
             '2': createWfEngine('2')
         };
 
-        function setWfFloor(rid, val) {
+        const _saveWfTimers = {};
+        function debouncedSaveWf(rid) {
+            if (_saveWfTimers[rid]) clearTimeout(_saveWfTimers[rid]);
+            _saveWfTimers[rid] = setTimeout(() => {
+                const st = wfState[rid];
+                if (!st) return;
+                fetch('/api/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        radio_id: rid,
+                        wf_floor: st.floor,
+                        wf_gain: st.gain,
+                        wf_peak: st.peak,
+                        wf_speed: st.speed,
+                        wf_mode: st.topMode
+                    })
+                }).catch(() => {});
+            }, 300);
+        }
+
+        function setWfFloor(rid, val, syncServer = true) {
             const parsed = parseInt(val, 10);
             const num = Math.max(-30, Math.min(60, isNaN(parsed) ? 0 : parsed));
             if (wfState[rid]) wfState[rid].floor = num;
+            const input = document.getElementById(`wf-floor-${rid}`);
+            if (input && String(input.value) !== String(num)) input.value = num;
             const txt = document.getElementById(`wf-floor-val-${rid}`);
             if (txt) txt.textContent = num;
-            localStorage.setItem(`icom_wf_floor_v4_${rid}`, num);
+            try { localStorage.setItem(`icom_wf_floor_v4_${rid}`, num); } catch (e) {}
+            if (syncServer) debouncedSaveWf(rid);
         }
 
-        function setWfGain(rid, val) {
+        function setWfGain(rid, val, syncServer = true) {
             const parsed = parseInt(val, 10);
             const num = Math.max(10, Math.min(200, isNaN(parsed) ? 60 : parsed));
             if (wfState[rid]) wfState[rid].gain = num;
+            const input = document.getElementById(`wf-gain-${rid}`);
+            if (input && String(input.value) !== String(num)) input.value = num;
             const txt = document.getElementById(`wf-gain-val-${rid}`);
             if (txt) txt.textContent = num;
-            localStorage.setItem(`icom_wf_gain_v4_${rid}`, num);
+            try { localStorage.setItem(`icom_wf_gain_v4_${rid}`, num); } catch (e) {}
+            if (syncServer) debouncedSaveWf(rid);
         }
 
-        function setWfPeak(rid, val) {
+        function setWfPeak(rid, val, syncServer = true) {
             const parsed = parseInt(val, 10);
             const num = Math.max(30, Math.min(160, isNaN(parsed) ? 85 : parsed));
             if (wfState[rid]) wfState[rid].peak = num;
+            const input = document.getElementById(`wf-peak-${rid}`);
+            if (input && String(input.value) !== String(num)) input.value = num;
             const txt = document.getElementById(`wf-peak-val-${rid}`);
             if (txt) txt.textContent = num;
-            localStorage.setItem(`icom_wf_peak_v4_${rid}`, num);
+            try { localStorage.setItem(`icom_wf_peak_v4_${rid}`, num); } catch (e) {}
+            if (syncServer) debouncedSaveWf(rid);
         }
 
-        function setWfSpeed(rid, val) {
+        function setWfSpeed(rid, val, syncServer = true) {
             const parsed = parseInt(val, 10);
             const num = Math.max(1, Math.min(5, isNaN(parsed) ? 2 : parsed));
             if (wfState[rid]) wfState[rid].speed = num;
+            const input = document.getElementById(`wf-speed-${rid}`);
+            if (input && String(input.value) !== String(num)) input.value = num;
             const txt = document.getElementById(`wf-speed-val-${rid}`);
             if (txt) txt.textContent = num + 'x';
-            localStorage.setItem(`icom_wf_speed_v4_${rid}`, num);
+            try { localStorage.setItem(`icom_wf_speed_v4_${rid}`, num); } catch (e) {}
+            if (syncServer) debouncedSaveWf(rid);
         }
 
-        function setTopScopeMode(rid, mode) {
+        function setTopScopeMode(rid, mode, syncServer = true) {
             const st = wfState[rid];
             if (!st) return;
             st.topMode = (mode === '3d') ? '3d' : 'spectrum';
-            localStorage.setItem(`icom_top_scope_mode_v4_${rid}`, st.topMode);
+            try { localStorage.setItem(`icom_top_scope_mode_v4_${rid}`, st.topMode); } catch (e) {}
             const btn2d = document.getElementById(`wf-mode-2d-${rid}`);
             const btn3d = document.getElementById(`wf-mode-3d-${rid}`);
             if (btn2d) btn2d.classList.toggle('active', st.topMode === 'spectrum');
             if (btn3d) btn3d.classList.toggle('active', st.topMode === '3d');
             renderRadioState(rid);
+            if (syncServer) debouncedSaveWf(rid);
         }
 
         // Apply saved 2D/3D button states and all sliders on startup
@@ -3122,6 +3156,14 @@
                     if (data.config.web_pin !== undefined || data.config.web_pin_enabled !== undefined) {
                         updatePinTopButton(data.config.web_pin, data.config.web_pin_enabled);
                     }
+                    if (Array.isArray(data.config.bookmarks) && data.config.bookmarks.length > 0) {
+                        bookmarks = data.config.bookmarks;
+                        saveBookmarks(false);
+                        const drawer = document.getElementById('bm-drawer');
+                        if (drawer && drawer.classList.contains('open')) {
+                            renderBookmarksList();
+                        }
+                    }
                 }
                 ['1', '2'].forEach(rid => {
                     const sel = document.getElementById(`port-${rid}`);
@@ -3145,6 +3187,11 @@
                         document.getElementById(`key-name-${rid}`).textContent = keyBindState[rid].name;
                         document.getElementById(`global-btn-${rid}`).classList.toggle('checked', keyBindState[rid].global);
                     }
+                    if (rconf.wf_floor !== undefined) setWfFloor(rid, rconf.wf_floor, false);
+                    if (rconf.wf_gain !== undefined) setWfGain(rid, rconf.wf_gain, false);
+                    if (rconf.wf_peak !== undefined) setWfPeak(rid, rconf.wf_peak, false);
+                    if (rconf.wf_speed !== undefined) setWfSpeed(rid, rconf.wf_speed, false);
+                    if (rconf.wf_mode !== undefined) setTopScopeMode(rid, rconf.wf_mode, false);
                     if (data.states && data.states[rid]) {
                         Object.assign(radioState[rid], data.states[rid]);
                         renderRadioState(rid);
@@ -3395,11 +3442,18 @@
             updateBookmarksBadge();
         }
 
-        function saveBookmarks() {
+        function saveBookmarks(syncServer = true) {
             try {
                 localStorage.setItem('icom_bookmarks_v1', JSON.stringify(bookmarks));
             } catch (e) {}
             updateBookmarksBadge();
+            if (syncServer) {
+                fetch('/api/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ bookmarks: bookmarks })
+                }).catch(() => {});
+            }
         }
 
         function updateBookmarksBadge() {
