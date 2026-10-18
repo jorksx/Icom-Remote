@@ -14,21 +14,26 @@ Featuring real-time 2D/3D waterfall spectrum display, bidirectional low-latency 
   - Control two Icom radios simultaneously (e.g., **IC-7300** for HF/50 MHz and **IC-9700** for VHF/UHF/1.2 GHz).
   - Independent VFO A/B controls, Main and Sub VFO monitoring, split operation, and quick band switching.
 
-- **High-Resolution 2D & 3D Waterfall:**
-  - Real-time CI-V spectrum scope capture directly over USB.
-  - Interactive **3D Waterfall** mode with hardware-accelerated rendering.
-  - **Click-to-Tune:** Click anywhere on the spectrum or waterfall to instantly tune the radio.
-  - **Mouse Wheel Tuning on Waterfall:** Hover over the waterfall and scroll to step in 0.5 kHz increments (with automatic grid alignment).
-  - **Dynamic Sensitivity & Filter Controls:** Adjustable waterfall gain/contrast with persistent memory.
+- **High-Resolution 2D & 3D Waterfall & Spectrum Engine:**
+  - Real-time CI-V spectrum scope capture directly over USB at up to 60 FPS.
+  - **Perceptual Dynamic Range (`Gamma 0.55`):** Soft-knee transfer function illuminates faint signals and speech skirts (1.5–2.8 kHz) in vivid royal blue and cyan.
+  - **Full 2.8 kHz SSB Audio Bandwidth:** Instantly recognize transmission width and sideband slope asymmetry (USB vs LSB) just like on the radio's physical LCD.
+  - **Zero-Vertical-Streak Waterfall:** RF white-noise temporal decorrelation eliminates artificial column lines when idling.
+  - **Dynamic Floor, Gain & Peak Controls:** Floor range `-30` to `+60` (default `0`), Gain `10` to `200`, and Peak ceiling controls with persistent memory.
+  - **Interactive 3D Waterfall (3DSS):** High-density perspective surface ridges with synchronized dynamic range.
+  - **Non-Intrusive CI-V Lifecycle:** Safely disconnects PTT without ever closing or hiding the spectrum scope on the radio's physical touchscreen.
+  - **Click-to-Tune & Mouse Wheel Tuning:** Click anywhere on the spectrum or waterfall to tune; hover and scroll mouse wheel to step in 0.5 kHz grid-aligned increments.
 
 - **Low-Latency Bidirectional Audio:**
   - Isolated audio paths: streaming audio to a mobile phone or remote browser does **not** trigger the local PC speakers in the shack.
   - Independent audio engines for each radio channel.
   - Remote PTT & high-quality microphone transmission with audio level monitoring.
 
-- **Mobile Web Interface (HTTPS):**
+- **Mobile Web Interface (HTTPS) & Configurable PIN Security:**
   - Fully responsive web UI accessible from any smartphone, tablet, or secondary laptop on your LAN/Wi-Fi or over VPN/Tailscale.
   - Secure HTTPS support for microphone input and Web Audio API permissions.
+  - **Configurable PIN Protection:** Quick topbar button to change PIN code or disable PIN prompt completely for seamless local network access.
+  - Dynamic server-side authentication and session management.
 
 - **Built-in Hamlib `rigctld` Emulation:**
   - Integrated rigctld TCP servers (default ports `4532` and `4533`).
