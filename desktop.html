@@ -1252,19 +1252,19 @@
                             <button class="wf-mode-btn" id="wf-mode-2d-1" onclick="setTopScopeMode('1', 'spectrum')">Spectrum</button>
                             <button class="wf-mode-btn active" id="wf-mode-3d-1" onclick="setTopScopeMode('1', '3d')">3D Waterfall</button>
                         </div>
-                        <span title="Noise floor baseline: lower reveals faint signals, higher cuts background noise">Floor:</span>
-                        <input type="range" id="wf-floor-1" min="-30" max="50" value="0" title="Noise Floor" oninput="setWfFloor('1', this.value)">
-                        <span class="wf-slider-val" id="wf-floor-val-1">0</span>
+                        <span title="Noise floor baseline (0..60): lower reveals faint noise texture, higher clears background to black">Floor:</span>
+                        <input type="range" id="wf-floor-1" min="0" max="60" value="15" title="Noise Floor Baseline" oninput="setWfFloor('1', this.value)">
+                        <span class="wf-slider-val" id="wf-floor-val-1">15</span>
 
-                        <span title="Gain / amplification of signals">Gain:</span>
-                        <input type="range" id="wf-gain-1" min="5" max="200" value="60" title="Waterfall Gain" oninput="setWfGain('1', this.value)">
+                        <span title="Waterfall gain and contrast">Gain:</span>
+                        <input type="range" id="wf-gain-1" min="10" max="200" value="60" title="Waterfall Gain" oninput="setWfGain('1', this.value)">
                         <span class="wf-slider-val" id="wf-gain-val-1">60</span>
 
-                        <span title="Peak saturation level / ceiling">Peak:</span>
-                        <input type="range" id="wf-peak-1" min="20" max="150" value="65" title="Peak Ceiling" oninput="setWfPeak('1', this.value)">
-                        <span class="wf-slider-val" id="wf-peak-val-1">65</span>
+                        <span title="Signal peak saturation ceiling (40..160)">Peak:</span>
+                        <input type="range" id="wf-peak-1" min="40" max="160" value="95" title="Peak Ceiling" oninput="setWfPeak('1', this.value)">
+                        <span class="wf-slider-val" id="wf-peak-val-1">95</span>
 
-                        <span title="Waterfall scroll speed (1x to 5x)">Speed:</span>
+                        <span title="Waterfall scroll speed (1x = hardware sweep synchronous, 2x..5x = smooth stream)">Speed:</span>
                         <input type="range" id="wf-speed-1" min="1" max="5" value="2" title="Scroll Speed" oninput="setWfSpeed('1', this.value)">
                         <span class="wf-slider-val" id="wf-speed-val-1">2x</span>
                     </div>
@@ -1471,19 +1471,19 @@
                             <button class="wf-mode-btn" id="wf-mode-2d-2" onclick="setTopScopeMode('2', 'spectrum')">Spectrum</button>
                             <button class="wf-mode-btn active" id="wf-mode-3d-2" onclick="setTopScopeMode('2', '3d')">3D Waterfall</button>
                         </div>
-                        <span title="Noise floor baseline: lower reveals faint signals, higher cuts background noise">Floor:</span>
-                        <input type="range" id="wf-floor-2" min="-30" max="50" value="0" title="Noise Floor" oninput="setWfFloor('2', this.value)">
-                        <span class="wf-slider-val" id="wf-floor-val-2">0</span>
+                        <span title="Noise floor baseline (0..60): lower reveals faint noise texture, higher clears background to black">Floor:</span>
+                        <input type="range" id="wf-floor-2" min="0" max="60" value="15" title="Noise Floor Baseline" oninput="setWfFloor('2', this.value)">
+                        <span class="wf-slider-val" id="wf-floor-val-2">15</span>
 
-                        <span title="Gain / amplification of signals">Gain:</span>
-                        <input type="range" id="wf-gain-2" min="5" max="200" value="60" title="Waterfall Gain" oninput="setWfGain('2', this.value)">
+                        <span title="Waterfall gain and contrast">Gain:</span>
+                        <input type="range" id="wf-gain-2" min="10" max="200" value="60" title="Waterfall Gain" oninput="setWfGain('2', this.value)">
                         <span class="wf-slider-val" id="wf-gain-val-2">60</span>
 
-                        <span title="Peak saturation level / ceiling">Peak:</span>
-                        <input type="range" id="wf-peak-2" min="20" max="150" value="65" title="Peak Ceiling" oninput="setWfPeak('2', this.value)">
-                        <span class="wf-slider-val" id="wf-peak-val-2">65</span>
+                        <span title="Signal peak saturation ceiling (40..160)">Peak:</span>
+                        <input type="range" id="wf-peak-2" min="40" max="160" value="95" title="Peak Ceiling" oninput="setWfPeak('2', this.value)">
+                        <span class="wf-slider-val" id="wf-peak-val-2">95</span>
 
-                        <span title="Waterfall scroll speed (1x to 5x)">Speed:</span>
+                        <span title="Waterfall scroll speed (1x = hardware sweep synchronous, 2x..5x = smooth stream)">Speed:</span>
                         <input type="range" id="wf-speed-2" min="1" max="5" value="2" title="Scroll Speed" oninput="setWfSpeed('2', this.value)">
                         <span class="wf-slider-val" id="wf-speed-val-2">2x</span>
                     </div>
@@ -1951,44 +1951,44 @@
         const wfColorLUT = new Array(256);
         (function initLUT() {
             for (let v = 0; v < 256; v++) {
+                const norm = v / 255.0;
                 let r = 0, g = 0, b = 0;
-                if (v < 20) {
-                    // 0..19: Deep Space Black to Dark Midnight Blue (Noise Floor)
-                    const t = v / 19;
-                    r = Math.floor(2 + t * 4);
-                    g = Math.floor(4 + t * 8);
-                    b = Math.floor(10 + t * 25);
-                } else if (v < 60) {
-                    // 20..59: Weak DX Signals - High Contrast Knee!
-                    // Deep Midnight -> Electric Cobalt -> Vivid Royal Blue (#06235f -> #14aafe)
-                    const t = (v - 20) / 40;
-                    r = Math.floor(6 + t * 14);
-                    g = Math.floor(35 + t * 135);
-                    b = Math.floor(95 + t * 155);
-                } else if (v < 110) {
-                    // 60..109: Readable Signals - Electric Sky Blue -> Vivid Spring Green
-                    const t = (v - 60) / 50;
-                    r = Math.floor(20 + t * 14);
-                    g = Math.floor(170 + t * 50);
-                    b = Math.floor(250 - t * 200);
-                } else if (v < 170) {
-                    // 110..169: Solid Signals - Vivid Emerald Green -> Brilliant Amber Yellow
-                    const t = (v - 110) / 60;
-                    r = Math.floor(34 + t * 216);
-                    g = Math.floor(220 - t * 30);
-                    b = Math.floor(50 * (1 - t));
-                } else if (v < 225) {
-                    // 170..224: Heavy Signals - Amber Yellow -> Fiery Crimson Red
-                    const t = (v - 170) / 55;
-                    r = Math.floor(250 - t * 15);
-                    g = Math.floor(190 - t * 150);
-                    b = Math.floor(t * 30);
+                if (norm < 0.12) {
+                    // 0.00..0.12: Background Floor - Black into Deep Midnight Navy (#02040a -> #081237)
+                    const t = norm / 0.12;
+                    r = Math.floor(2 + t * 6);
+                    g = Math.floor(4 + t * 14);
+                    b = Math.floor(10 + t * 45);
+                } else if (norm < 0.32) {
+                    // 0.12..0.32: Weak DX Signals - Dark Navy -> Electric Royal Blue -> Sky Azure (#081237 -> #1d4ed8 -> #0284c7)
+                    const t = (norm - 0.12) / 0.20;
+                    r = Math.floor(8 + t * 12);
+                    g = Math.floor(18 + t * 114);
+                    b = Math.floor(55 + t * 144);
+                } else if (norm < 0.52) {
+                    // 0.32..0.52: Readable Signals - Sky Azure -> Electric Cyan -> Aquamarine (#0284c7 -> #06b6d4 -> #10b981)
+                    const t = (norm - 0.32) / 0.20;
+                    r = Math.floor(20 + t * -4);
+                    g = Math.floor(132 + t * 53);
+                    b = Math.floor(199 - t * 70);
+                } else if (norm < 0.72) {
+                    // 0.52..0.72: Solid Signals - Aquamarine -> Bright Spring Green -> Golden Yellow (#10b981 -> #84cc16 -> #eab308)
+                    const t = (norm - 0.52) / 0.20;
+                    r = Math.floor(16 + t * 218);
+                    g = Math.floor(185 + t * -6);
+                    b = Math.floor(129 * (1.0 - t));
+                } else if (norm < 0.88) {
+                    // 0.72..0.88: Strong Signals - Golden Yellow -> Vibrant Amber Orange -> Fiery Crimson (#eab308 -> #f97316 -> #dc2626)
+                    const t = (norm - 0.72) / 0.16;
+                    r = Math.floor(234 + t * -14);
+                    g = Math.floor(179 - t * 141);
+                    b = Math.floor(8 + t * 30);
                 } else {
-                    // 225..255: Overload / Peak Cores - Crimson -> Brilliant White-Hot
-                    const t = (v - 225) / 30;
-                    r = 255;
-                    g = Math.floor(40 + t * 215);
-                    b = Math.floor(30 + t * 225);
+                    // 0.88..1.00: Heavy / Peak Saturated Cores - Crimson -> Pure White Hot (#dc2626 -> #ffffff)
+                    const t = (norm - 0.88) / 0.12;
+                    r = Math.floor(220 + t * 35);
+                    g = Math.floor(38 + t * 217);
+                    b = Math.floor(38 + t * 217);
                 }
                 wfColorLUT[v] = [r, g, b];
             }
@@ -2009,30 +2009,26 @@
             }
 
             const savedMode = localStorage.getItem(`icom_top_scope_mode_v3_${rid}`) || '3d';
-            const savedFloor = parseInt(localStorage.getItem(`icom_wf_floor_v2_${rid}`), 10);
-            const floor = !isNaN(savedFloor) ? savedFloor : 0;
-            const savedGain = parseInt(localStorage.getItem(`icom_wf_gain_v2_${rid}`), 10);
+            const savedFloor = parseInt(localStorage.getItem(`icom_wf_floor_v3_${rid}`), 10);
+            const floor = !isNaN(savedFloor) ? savedFloor : 15;
+            const savedGain = parseInt(localStorage.getItem(`icom_wf_gain_v3_${rid}`), 10);
             const gain = !isNaN(savedGain) ? savedGain : 60;
-            const savedPeak = parseInt(localStorage.getItem(`icom_wf_peak_v2_${rid}`), 10);
-            const peak = !isNaN(savedPeak) ? savedPeak : 65;
-            const savedSpeed = parseInt(localStorage.getItem(`icom_wf_speed_v2_${rid}`), 10);
+            const savedPeak = parseInt(localStorage.getItem(`icom_wf_peak_v3_${rid}`), 10);
+            const peak = !isNaN(savedPeak) ? savedPeak : 95;
+            const savedSpeed = parseInt(localStorage.getItem(`icom_wf_speed_v3_${rid}`), 10);
             const speed = !isNaN(savedSpeed) ? savedSpeed : 2;
 
             return {
                 offscreen,
                 offCtx,
                 rowImg: offCtx.createImageData(640, 1),
-                rawSortBuf: new Float32Array(WF_BINS),
-                prevAbove80: new Float32Array(WF_BINS),
                 targetSpec: new Float32Array(WF_BINS),
                 smoothSpec: new Float32Array(WF_BINS),
                 smooth3D: new Float32Array(WF_BINS),
                 wfCoherent: new Float32Array(WF_BINS),
                 latestRaw: new Float32Array(WF_BINS),
                 currentSweep: new Float32Array(WF_BINS),
-                effectiveFloor: 0,
-                dynSpan: 50,
-                p20: 25,
+                pendingSweep: false,
                 lastScrollTime: performance.now(),
                 last3DTime: performance.now(),
                 history3D,
@@ -2058,27 +2054,27 @@
         };
 
         function setWfFloor(rid, val) {
-            const num = Math.max(-30, Math.min(50, parseInt(val, 10) || 0));
+            const num = Math.max(0, Math.min(60, parseInt(val, 10) || 15));
             if (wfState[rid]) wfState[rid].floor = num;
             const txt = document.getElementById(`wf-floor-val-${rid}`);
-            if (txt) txt.textContent = (num > 0 ? '+' : '') + num;
-            localStorage.setItem(`icom_wf_floor_v2_${rid}`, num);
+            if (txt) txt.textContent = num;
+            localStorage.setItem(`icom_wf_floor_v3_${rid}`, num);
         }
 
         function setWfGain(rid, val) {
-            const num = Math.max(5, Math.min(200, parseInt(val, 10) || 60));
+            const num = Math.max(10, Math.min(200, parseInt(val, 10) || 60));
             if (wfState[rid]) wfState[rid].gain = num;
             const txt = document.getElementById(`wf-gain-val-${rid}`);
             if (txt) txt.textContent = num;
-            localStorage.setItem(`icom_wf_gain_v2_${rid}`, num);
+            localStorage.setItem(`icom_wf_gain_v3_${rid}`, num);
         }
 
         function setWfPeak(rid, val) {
-            const num = Math.max(20, Math.min(150, parseInt(val, 10) || 65));
+            const num = Math.max(40, Math.min(160, parseInt(val, 10) || 95));
             if (wfState[rid]) wfState[rid].peak = num;
             const txt = document.getElementById(`wf-peak-val-${rid}`);
             if (txt) txt.textContent = num;
-            localStorage.setItem(`icom_wf_peak_v2_${rid}`, num);
+            localStorage.setItem(`icom_wf_peak_v3_${rid}`, num);
         }
 
         function setWfSpeed(rid, val) {
@@ -2086,7 +2082,7 @@
             if (wfState[rid]) wfState[rid].speed = num;
             const txt = document.getElementById(`wf-speed-val-${rid}`);
             if (txt) txt.textContent = num + 'x';
-            localStorage.setItem(`icom_wf_speed_v2_${rid}`, num);
+            localStorage.setItem(`icom_wf_speed_v3_${rid}`, num);
         }
 
         function setTopScopeMode(rid, mode) {
@@ -2113,7 +2109,7 @@
             const flSlider = document.getElementById(`wf-floor-${rid}`);
             if (flSlider) flSlider.value = st.floor;
             const flTxt = document.getElementById(`wf-floor-val-${rid}`);
-            if (flTxt) flTxt.textContent = (st.floor > 0 ? '+' : '') + st.floor;
+            if (flTxt) flTxt.textContent = st.floor;
 
             const gSlider = document.getElementById(`wf-gain-${rid}`);
             if (gSlider) gSlider.value = st.gain;
@@ -2182,42 +2178,25 @@
             if (edgeHigh !== undefined) st.edgeHigh = edgeHigh;
             const len = Math.min(WF_BINS, dataArr.length);
 
-            // 1. Sort for robust noise floor estimation (20th percentile)
-            for (let i = 0; i < len; i++) {
-                st.rawSortBuf[i] = dataArr[i];
-            }
-            st.rawSortBuf.subarray(0, len).sort();
-            const p20 = st.rawSortBuf[Math.floor(len * 0.20)];
-            st.p20 = p20;
+            const floorVal = (st.floor !== undefined) ? st.floor : 15;
 
-            const floorOffset = (st.floor !== undefined) ? st.floor : 0;
-            const effectiveFloor = Math.max(0, p20 + floorOffset);
-            const gainVal = Math.max(5, (st.gain !== undefined) ? st.gain : 60);
-            const peakVal = Math.max(20, (st.peak !== undefined) ? st.peak : 65);
-            const dynSpan = Math.max(8.0, (peakVal * 100.0) / gainVal);
-            st.effectiveFloor = effectiveFloor;
-            st.dynSpan = dynSpan;
-
-            // 2. Ingest raw amplitudes and update coherent envelopes for 2D spectrum & 3D waterfall
+            // Ingest raw 0..160 amplitudes from Icom CI-V
             for (let i = 0; i < len; i++) {
                 const raw = dataArr[i];
                 st.latestRaw[i] = raw;
 
-                const aboveFloor = Math.max(0, raw - effectiveFloor);
+                const aboveFloor = Math.max(0, raw - floorVal);
                 st.wfCoherent[i] = aboveFloor;
-
-                // Base grass for 2D spectrum
-                const baseGrass = Math.max(0, raw - p20);
-                const specVal = Math.min(4.0, baseGrass * 0.22) + aboveFloor * 1.35;
-                st.targetSpec[i] = specVal;
+                st.targetSpec[i] = raw;
 
                 if (!st.hasData) {
                     st.currentSweep[i] = raw;
-                    st.smoothSpec[i] = specVal;
+                    st.smoothSpec[i] = raw;
                     st.smooth3D[i] = aboveFloor;
                 }
             }
 
+            st.pendingSweep = true;
             st.hasData = true;
         }
 
@@ -2288,80 +2267,85 @@
                 }
 
                 if (st.hasData && rState.online) {
-                    const gain = (st.gain !== undefined ? st.gain : 60) / 60.0;
-                    const peakScale = Math.max(20, (st.peak !== undefined ? st.peak : 65));
-
-                    // 1. Smooth 1-pixel constant-cadence Waterfall scrolling (no jerky packet jumps!)
-                    const SPEED_INTERVALS = [0, 65, 40, 25, 15, 10]; // ms per 1-pixel scroll
                     const spd = Math.max(1, Math.min(5, st.speed || 2));
-                    const interval = SPEED_INTERVALS[spd] || 40;
                     const now = performance.now();
-                    const dt = now - st.lastScrollTime;
 
-                    if (dt > 400) {
-                        st.lastScrollTime = now;
-                    } else if (dt >= interval) {
-                        const steps = Math.min(4, Math.floor(dt / interval));
-                        st.lastScrollTime = now - (dt % interval);
+                    let shouldScroll = false;
 
-                        const floorOffset = (st.floor !== undefined) ? st.floor : 0;
-                        const effFloor = Math.max(0, st.p20 + floorOffset);
-                        const gainVal = Math.max(5, (st.gain !== undefined) ? st.gain : 60);
-                        const peakVal = Math.max(20, (st.peak !== undefined) ? st.peak : 65);
-                        const dSpan = Math.max(8.0, (peakVal * 100.0) / gainVal);
-
-                        for (let s = 0; s < steps; s++) {
-                            // Exponential blend towards latest raw radio sweep
-                            for (let i = 0; i < WF_BINS; i++) {
-                                st.currentSweep[i] += (st.latestRaw[i] - st.currentSweep[i]) * 0.40;
-                            }
-
-                            const rowPixels = st.rowImg.data;
-                            const binScale = (WF_BINS - 1) / Math.max(1, w - 1);
-
-                            for (let x = 0; x < w; x++) {
-                                const fIdx = x * binScale;
-                                const i1 = Math.min(WF_BINS - 1, fIdx | 0);
-                                const i0 = Math.max(0, i1 - 1);
-                                const i2 = Math.min(WF_BINS - 1, i1 + 1);
-                                const i3 = Math.min(WF_BINS - 1, i1 + 2);
-                                const t = fIdx - i1;
-
-                                const y0 = st.currentSweep[i0];
-                                const y1 = st.currentSweep[i1];
-                                const y2 = st.currentSweep[i2];
-                                const y3 = st.currentSweep[i3];
-
-                                const a = -0.5 * y0 + 1.5 * y1 - 1.5 * y2 + 0.5 * y3;
-                                const b = y0 - 2.5 * y1 + 2.0 * y2 - 0.5 * y3;
-                                const c = -0.5 * y0 + 0.5 * y2;
-                                const d = y1;
-                                let rawVal = ((a * t + b) * t + c) * t + d;
-                                if (rawVal < 0) rawVal = 0;
-
-                                let lutIdx;
-                                if (rawVal <= effFloor) {
-                                    const nFrac = Math.max(0, Math.min(1.0, rawVal / Math.max(1, effFloor)));
-                                    lutIdx = Math.floor(nFrac * 19);
-                                } else {
-                                    const eff = rawVal - effFloor;
-                                    const norm = Math.min(1.0, eff / dSpan);
-                                    const shaped = Math.pow(norm, 0.72);
-                                    lutIdx = Math.min(255, Math.floor(20 + shaped * 235));
-                                }
-
-                                const rgb = wfColorLUT[lutIdx];
-                                const p = x * 4;
-                                rowPixels[p] = rgb[0];
-                                rowPixels[p + 1] = rgb[1];
-                                rowPixels[p + 2] = rgb[2];
-                                rowPixels[p + 3] = 255;
-                            }
-
-                            st.offCtx.imageSmoothingEnabled = false;
-                            st.offCtx.drawImage(st.offscreen, 0, 0, w, wfH - 1, 0, 1, w, wfH - 1);
-                            st.offCtx.putImageData(st.rowImg, 0, 0);
+                    if (spd === 1) {
+                        // 1x = Hardware-synchronous: scrolls exactly 1 pixel ONLY when a new sweep arrives from the radio!
+                        if (st.pendingSweep) {
+                            st.pendingSweep = false;
+                            st.currentSweep.set(st.latestRaw);
+                            shouldScroll = true;
                         }
+                    } else {
+                        // 2x..5x: Smooth continuous cadence with RF white-noise temporal decorrelation (zero vertical lines!)
+                        const SPEED_INTERVALS = [0, 0, 36, 24, 16, 10]; // ms per 1-pixel scroll
+                        const interval = SPEED_INTERVALS[spd] || 36;
+                        const dt = now - st.lastScrollTime;
+
+                        if (dt > 400) {
+                            st.lastScrollTime = now;
+                        } else if (dt >= interval) {
+                            st.lastScrollTime = now - (dt % interval);
+                            shouldScroll = true;
+
+                            // Smoothly blend towards latest raw radio sweep
+                            for (let i = 0; i < WF_BINS; i++) {
+                                const target = st.latestRaw[i];
+                                const curr = st.currentSweep[i];
+                                let blended = curr + (target - curr) * 0.35;
+                                if (blended < 45) {
+                                    // Subtle RF white noise jitter (±1.1 units) breaks static column correlation
+                                    blended += (Math.random() - 0.5) * 2.2;
+                                    if (blended < 0) blended = 0;
+                                }
+                                st.currentSweep[i] = blended;
+                            }
+                            st.pendingSweep = false;
+                        }
+                    }
+
+                    const floorVal = (st.floor !== undefined) ? st.floor : 15;
+                    const peakVal = (st.peak !== undefined) ? st.peak : 95;
+                    const gainVal = (st.gain !== undefined) ? st.gain : 60;
+                    const gainFactor = gainVal / 60.0;
+                    const gain = gainFactor;
+                    const nominalSpan = Math.max(15, peakVal - floorVal);
+                    const effectiveSpan = Math.max(10, nominalSpan / gainFactor);
+
+                    if (shouldScroll) {
+                        const rowPixels = st.rowImg.data;
+                        const binScale = (WF_BINS - 1) / Math.max(1, w - 1);
+
+                        for (let x = 0; x < w; x++) {
+                            const fIdx = x * binScale;
+                            const i0 = fIdx | 0;
+                            const i1 = Math.min(WF_BINS - 1, i0 + 1);
+                            const frac = fIdx - i0;
+
+                            // Crisp linear interpolation (retains true 1-pixel RF resolution, zero wavy mush!)
+                            const v0 = st.currentSweep[i0];
+                            const v1 = st.currentSweep[i1];
+                            const rawVal = v0 + (v1 - v0) * frac;
+
+                            // Smooth linear mapping across full dynamic range
+                            const norm = Math.max(0.0, Math.min(1.0, (rawVal - floorVal) / effectiveSpan));
+                            const lutIdx = Math.floor(norm * 255);
+                            const rgb = wfColorLUT[lutIdx];
+
+                            const p = x * 4;
+                            rowPixels[p] = rgb[0];
+                            rowPixels[p + 1] = rgb[1];
+                            rowPixels[p + 2] = rgb[2];
+                            rowPixels[p + 3] = 255;
+                        }
+
+                        // Shift down by exactly 1 hardware pixel (zero blur!)
+                        st.offCtx.imageSmoothingEnabled = false;
+                        st.offCtx.drawImage(st.offscreen, 0, 0, w, wfH - 1, 0, 1, w, wfH - 1);
+                        st.offCtx.putImageData(st.rowImg, 0, 0);
                     }
 
                     // 2. Update per-bin display state for spectrum & 3D:
@@ -2395,7 +2379,7 @@
                     const subShift = Math.min(1.0, (now3D - st.last3DTime) / 130.0);
 
                     if (!is3D) {
-                        // Draw crisp 475-bin 2D Spectrum (no horizontal spline mush, calm noise floor)
+                        // Draw crisp 475-bin 2D Spectrum harmonized with waterfall dynamic range
                         const grad = ctx.createLinearGradient(0, 0, 0, specH);
                         grad.addColorStop(0, 'rgba(56, 189, 248, 0.42)');
                         grad.addColorStop(0.65, 'rgba(37, 99, 235, 0.18)');
@@ -2409,7 +2393,7 @@
                         ctx.moveTo(0, specH);
                         for (let i = 0; i < WF_BINS; i++) {
                             const px = i * xStep;
-                            const norm = Math.min(1.0, (st.smoothSpec[i] / peakScale) * gain);
+                            const norm = Math.max(0.0, Math.min(1.0, (st.smoothSpec[i] - floorVal) / effectiveSpan));
                             const py = specH - norm * usableH;
                             ctx.lineTo(px, py);
                         }
@@ -2423,7 +2407,7 @@
                         ctx.beginPath();
                         for (let i = 0; i < WF_BINS; i++) {
                             const px = i * xStep;
-                            const norm = Math.min(1.0, (st.smoothSpec[i] / peakScale) * gain);
+                            const norm = Math.max(0.0, Math.min(1.0, (st.smoothSpec[i] - floorVal) / effectiveSpan));
                             const py = specH - norm * usableH;
                             if (i === 0) ctx.moveTo(px, py);
                             else ctx.lineTo(px, py);
