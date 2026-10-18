@@ -660,14 +660,22 @@
         .wf-toolbar-right {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
             font-size: 11px;
+            flex-wrap: nowrap;
         }
         .wf-toolbar-right input[type="range"] {
-            width: 62px;
+            width: 48px;
             height: 4px;
             accent-color: var(--accent);
             cursor: pointer;
+        }
+        .wf-slider-val {
+            min-width: 20px;
+            font-size: 10px;
+            color: var(--accent);
+            font-weight: 600;
+            display: inline-block;
         }
         .wf-mode-switch {
             display: inline-flex;
@@ -1244,12 +1252,21 @@
                             <button class="wf-mode-btn" id="wf-mode-2d-1" onclick="setTopScopeMode('1', 'spectrum')">Spectrum</button>
                             <button class="wf-mode-btn active" id="wf-mode-3d-1" onclick="setTopScopeMode('1', '3d')">3D Waterfall</button>
                         </div>
-                        <span title="Noise Filter: 0 = Max Sensitivity (see all weak signals), 100 = Heavy noise reduction">Filter:</span>
-                        <input type="range" id="wf-filter-1" min="0" max="100" value="25" title="Filter: 0 = Max Sensitivity (show all weak signals), 100 = Heavy noise reduction" oninput="setWfFilter('1', this.value)">
-                        <span id="wf-filter-val-1" style="min-width: 18px; font-size: 10px; color: var(--accent); font-weight: 600;">25</span>
-                        <span title="Waterfall contrast / brightness">Gain:</span>
-                        <input type="range" id="wf-gain-1" min="30" max="250" value="110" title="Waterfall Gain / Contrast" oninput="setWfGain('1', this.value)">
-                        <span id="wf-gain-val-1" style="min-width: 22px; font-size: 10px; color: var(--accent); font-weight: 600;">110</span>
+                        <span title="Noise floor baseline: lower reveals faint signals, higher cuts background noise">Floor:</span>
+                        <input type="range" id="wf-floor-1" min="-30" max="50" value="0" title="Noise Floor" oninput="setWfFloor('1', this.value)">
+                        <span class="wf-slider-val" id="wf-floor-val-1">0</span>
+
+                        <span title="Gain / amplification of signals">Gain:</span>
+                        <input type="range" id="wf-gain-1" min="5" max="200" value="60" title="Waterfall Gain" oninput="setWfGain('1', this.value)">
+                        <span class="wf-slider-val" id="wf-gain-val-1">60</span>
+
+                        <span title="Peak saturation level / ceiling">Peak:</span>
+                        <input type="range" id="wf-peak-1" min="20" max="150" value="65" title="Peak Ceiling" oninput="setWfPeak('1', this.value)">
+                        <span class="wf-slider-val" id="wf-peak-val-1">65</span>
+
+                        <span title="Waterfall scroll speed (1x to 5x)">Speed:</span>
+                        <input type="range" id="wf-speed-1" min="1" max="5" value="2" title="Scroll Speed" oninput="setWfSpeed('1', this.value)">
+                        <span class="wf-slider-val" id="wf-speed-val-1">2x</span>
                     </div>
                 </div>
                 <div class="wf-canvas-wrap" id="wf-wrap-1">
@@ -1454,12 +1471,21 @@
                             <button class="wf-mode-btn" id="wf-mode-2d-2" onclick="setTopScopeMode('2', 'spectrum')">Spectrum</button>
                             <button class="wf-mode-btn active" id="wf-mode-3d-2" onclick="setTopScopeMode('2', '3d')">3D Waterfall</button>
                         </div>
-                        <span title="Noise Filter: 0 = Max Sensitivity (see all weak signals), 100 = Heavy noise reduction">Filter:</span>
-                        <input type="range" id="wf-filter-2" min="0" max="100" value="25" title="Filter: 0 = Max Sensitivity (show all weak signals), 100 = Heavy noise reduction" oninput="setWfFilter('2', this.value)">
-                        <span id="wf-filter-val-2" style="min-width: 18px; font-size: 10px; color: var(--accent); font-weight: 600;">25</span>
-                        <span title="Waterfall contrast / brightness">Gain:</span>
-                        <input type="range" id="wf-gain-2" min="30" max="250" value="110" title="Waterfall Gain / Contrast" oninput="setWfGain('2', this.value)">
-                        <span id="wf-gain-val-2" style="min-width: 22px; font-size: 10px; color: var(--accent); font-weight: 600;">110</span>
+                        <span title="Noise floor baseline: lower reveals faint signals, higher cuts background noise">Floor:</span>
+                        <input type="range" id="wf-floor-2" min="-30" max="50" value="0" title="Noise Floor" oninput="setWfFloor('2', this.value)">
+                        <span class="wf-slider-val" id="wf-floor-val-2">0</span>
+
+                        <span title="Gain / amplification of signals">Gain:</span>
+                        <input type="range" id="wf-gain-2" min="5" max="200" value="60" title="Waterfall Gain" oninput="setWfGain('2', this.value)">
+                        <span class="wf-slider-val" id="wf-gain-val-2">60</span>
+
+                        <span title="Peak saturation level / ceiling">Peak:</span>
+                        <input type="range" id="wf-peak-2" min="20" max="150" value="65" title="Peak Ceiling" oninput="setWfPeak('2', this.value)">
+                        <span class="wf-slider-val" id="wf-peak-val-2">65</span>
+
+                        <span title="Waterfall scroll speed (1x to 5x)">Speed:</span>
+                        <input type="range" id="wf-speed-2" min="1" max="5" value="2" title="Scroll Speed" oninput="setWfSpeed('2', this.value)">
+                        <span class="wf-slider-val" id="wf-speed-val-2">2x</span>
                     </div>
                 </div>
                 <div class="wf-canvas-wrap" id="wf-wrap-2">
@@ -1990,10 +2016,14 @@
             }
 
             const savedMode = localStorage.getItem(`icom_top_scope_mode_v3_${rid}`) || '3d';
-            const savedGain = parseInt(localStorage.getItem(`icom_wf_gain_v1_${rid}`), 10);
-            const gain = !isNaN(savedGain) ? (savedGain / 100) : 1.10;
-            const savedFilter = parseInt(localStorage.getItem(`icom_wf_filter_v1_${rid}`), 10);
-            const filter = !isNaN(savedFilter) ? savedFilter : 25;
+            const savedFloor = parseInt(localStorage.getItem(`icom_wf_floor_v2_${rid}`), 10);
+            const floor = !isNaN(savedFloor) ? savedFloor : 0;
+            const savedGain = parseInt(localStorage.getItem(`icom_wf_gain_v2_${rid}`), 10);
+            const gain = !isNaN(savedGain) ? savedGain : 60;
+            const savedPeak = parseInt(localStorage.getItem(`icom_wf_peak_v2_${rid}`), 10);
+            const peak = !isNaN(savedPeak) ? savedPeak : 65;
+            const savedSpeed = parseInt(localStorage.getItem(`icom_wf_speed_v2_${rid}`), 10);
+            const speed = !isNaN(savedSpeed) ? savedSpeed : 2;
 
             return {
                 offscreen,
@@ -2010,8 +2040,10 @@
                 tick3D: 0,
                 topMode: (savedMode === 'spectrum') ? 'spectrum' : '3d',
                 hasData: false,
+                floor: floor,
                 gain: gain,
-                filter: filter,
+                peak: peak,
+                speed: speed,
                 spanHz: 50000,
                 centerMode: true,
                 edgeLow: 0,
@@ -2026,20 +2058,36 @@
             '2': createWfEngine('2')
         };
 
-        function setWfFilter(rid, val) {
-            const num = Math.max(0, Math.min(100, parseInt(val, 10) || 0));
-            if (wfState[rid]) wfState[rid].filter = num;
-            const txt = document.getElementById(`wf-filter-val-${rid}`);
-            if (txt) txt.textContent = num;
-            localStorage.setItem(`icom_wf_filter_v1_${rid}`, num);
+        function setWfFloor(rid, val) {
+            const num = Math.max(-30, Math.min(50, parseInt(val, 10) || 0));
+            if (wfState[rid]) wfState[rid].floor = num;
+            const txt = document.getElementById(`wf-floor-val-${rid}`);
+            if (txt) txt.textContent = (num > 0 ? '+' : '') + num;
+            localStorage.setItem(`icom_wf_floor_v2_${rid}`, num);
         }
 
         function setWfGain(rid, val) {
-            const num = Math.max(30, Math.min(250, parseInt(val, 10) || 110));
-            if (wfState[rid]) wfState[rid].gain = num / 100;
+            const num = Math.max(5, Math.min(200, parseInt(val, 10) || 60));
+            if (wfState[rid]) wfState[rid].gain = num;
             const txt = document.getElementById(`wf-gain-val-${rid}`);
             if (txt) txt.textContent = num;
-            localStorage.setItem(`icom_wf_gain_v1_${rid}`, num);
+            localStorage.setItem(`icom_wf_gain_v2_${rid}`, num);
+        }
+
+        function setWfPeak(rid, val) {
+            const num = Math.max(20, Math.min(150, parseInt(val, 10) || 65));
+            if (wfState[rid]) wfState[rid].peak = num;
+            const txt = document.getElementById(`wf-peak-val-${rid}`);
+            if (txt) txt.textContent = num;
+            localStorage.setItem(`icom_wf_peak_v2_${rid}`, num);
+        }
+
+        function setWfSpeed(rid, val) {
+            const num = Math.max(1, Math.min(5, parseInt(val, 10) || 2));
+            if (wfState[rid]) wfState[rid].speed = num;
+            const txt = document.getElementById(`wf-speed-val-${rid}`);
+            if (txt) txt.textContent = num + 'x';
+            localStorage.setItem(`icom_wf_speed_v2_${rid}`, num);
         }
 
         function setTopScopeMode(rid, mode) {
@@ -2054,24 +2102,34 @@
             renderRadioState(rid);
         }
 
-        // Apply saved 2D/3D button states and sliders on startup
+        // Apply saved 2D/3D button states and all sliders on startup
         ['1', '2'].forEach(rid => {
-            const mode = wfState[rid].topMode;
+            const st = wfState[rid];
+            const mode = st.topMode;
             const btn2d = document.getElementById(`wf-mode-2d-${rid}`);
             const btn3d = document.getElementById(`wf-mode-3d-${rid}`);
             if (btn2d) btn2d.classList.toggle('active', mode === 'spectrum');
             if (btn3d) btn3d.classList.toggle('active', mode === '3d');
 
-            const gSlider = document.getElementById(`wf-gain-${rid}`);
-            const gVal = Math.round(wfState[rid].gain * 100);
-            if (gSlider) gSlider.value = gVal;
-            const gTxt = document.getElementById(`wf-gain-val-${rid}`);
-            if (gTxt) gTxt.textContent = gVal;
+            const flSlider = document.getElementById(`wf-floor-${rid}`);
+            if (flSlider) flSlider.value = st.floor;
+            const flTxt = document.getElementById(`wf-floor-val-${rid}`);
+            if (flTxt) flTxt.textContent = (st.floor > 0 ? '+' : '') + st.floor;
 
-            const fSlider = document.getElementById(`wf-filter-${rid}`);
-            if (fSlider) fSlider.value = wfState[rid].filter;
-            const fTxt = document.getElementById(`wf-filter-val-${rid}`);
-            if (fTxt) fTxt.textContent = wfState[rid].filter;
+            const gSlider = document.getElementById(`wf-gain-${rid}`);
+            if (gSlider) gSlider.value = st.gain;
+            const gTxt = document.getElementById(`wf-gain-val-${rid}`);
+            if (gTxt) gTxt.textContent = st.gain;
+
+            const pkSlider = document.getElementById(`wf-peak-${rid}`);
+            if (pkSlider) pkSlider.value = st.peak;
+            const pkTxt = document.getElementById(`wf-peak-val-${rid}`);
+            if (pkTxt) pkTxt.textContent = st.peak;
+
+            const spSlider = document.getElementById(`wf-speed-${rid}`);
+            if (spSlider) spSlider.value = st.speed;
+            const spTxt = document.getElementById(`wf-speed-val-${rid}`);
+            if (spTxt) spTxt.textContent = st.speed + 'x';
         });
 
         function ensureOffscreenSize(st, targetW, targetH) {
@@ -2132,14 +2190,14 @@
             st.rawSortBuf.subarray(0, len).sort();
             const p20 = st.rawSortBuf[Math.floor(len * 0.20)];
 
-            const filterVal = (st.filter !== undefined) ? st.filter : 25;
-            // Noise gate offset above p20: at filter=0, 0 gate; at filter=25, +2.0 units; at filter=100, +8.0 units
-            const gateOffset = (filterVal / 100.0) * 8.0;
-            const effectiveFloor = p20 + gateOffset;
+            // Floor offset from slider: -30 to +50 (default 0)
+            const floorOffset = (st.floor !== undefined) ? st.floor : 0;
+            const effectiveFloor = Math.max(0, p20 + floorOffset);
 
-            const gainVal = Math.max(0.3, st.gain || 1.10);
-            // Dynamic range span: at gain 1.1 -> dynSpan = 48 units. At gain 2.0 -> 26 units.
-            const dynSpan = Math.max(16.0, 52.0 / gainVal);
+            // Dynamic span: Peak (20..150) scaled by Gain (5..200)
+            const gainVal = Math.max(5, (st.gain !== undefined) ? st.gain : 60);
+            const peakVal = Math.max(20, (st.peak !== undefined) ? st.peak : 65);
+            const dynSpan = Math.max(8.0, (peakVal * 100.0) / gainVal);
 
             // 2. Compute processed amplitudes for 2D Spectrum & 3D Waterfall
             for (let i = 0; i < len; i++) {
@@ -2158,7 +2216,7 @@
                 }
             }
 
-            // 3. Immediately render ONE true 1-pixel scanline directly into offscreen waterfall!
+            // 3. Render scanline into offscreen waterfall at configured speed
             const canvas = document.getElementById(`wf-canvas-${rid}`);
             if (canvas && canvas.width > 10 && canvas.height > 10) {
                 const w = canvas.width;
@@ -2186,7 +2244,7 @@
                     const y2 = dataArr[i2];
                     const y3 = dataArr[i3];
 
-                    // Smooth Catmull-Rom spline interpolation (exact peaks, no step artifacts)
+                    // Catmull-Rom spline interpolation (exact peaks, smooth sub-pixel curve)
                     const a = -0.5 * y0 + 1.5 * y1 - 1.5 * y2 + 0.5 * y3;
                     const b = y0 - 2.5 * y1 + 2.0 * y2 - 0.5 * y3;
                     const c = -0.5 * y0 + 0.5 * y2;
@@ -2200,11 +2258,11 @@
                         const nFrac = Math.max(0, Math.min(1.0, rawVal / Math.max(1, effectiveFloor)));
                         lutIdx = Math.floor(nFrac * 14);
                     } else {
-                        // High-contrast signal emergence (index 16..255)
+                        // High-contrast signal emergence (index 15..255)
                         const eff = rawVal - effectiveFloor;
                         const norm = Math.min(1.0, eff / dynSpan);
-                        const shaped = Math.pow(norm, 0.80);
-                        lutIdx = Math.min(255, Math.floor(16 + shaped * 239));
+                        const shaped = Math.pow(norm, 0.85);
+                        lutIdx = Math.min(255, Math.floor(15 + shaped * 240));
                     }
 
                     const rgb = wfColorLUT[lutIdx];
@@ -2215,10 +2273,13 @@
                     rowPixels[p + 3] = 255;
                 }
 
-                // Shift down 1 pixel with nearest-neighbor precision (zero blur!)
+                // Scroll down by speed pixels (1 to 5) with zero blur
+                const speed = Math.max(1, Math.min(5, st.speed || 2));
                 st.offCtx.imageSmoothingEnabled = false;
-                st.offCtx.drawImage(st.offscreen, 0, 0, w, wfH - 1, 0, 1, w, wfH - 1);
-                st.offCtx.putImageData(st.rowImg, 0, 0);
+                st.offCtx.drawImage(st.offscreen, 0, 0, w, wfH - speed, 0, speed, w, wfH - speed);
+                for (let k = 0; k < speed; k++) {
+                    st.offCtx.putImageData(st.rowImg, 0, k);
+                }
             }
 
             st.hasData = true;
@@ -2291,7 +2352,8 @@
                 }
 
                 if (st.hasData && rState.online) {
-                    const gain = st.gain;
+                    const gain = (st.gain !== undefined ? st.gain : 60) / 60.0;
+                    const peakScale = Math.max(20, (st.peak !== undefined ? st.peak : 65));
 
                     // Update per-bin display state:
                     for (let i = 0; i < WF_BINS; i++) {
@@ -2335,7 +2397,7 @@
                         ctx.moveTo(0, specH);
                         for (let i = 0; i < WF_BINS; i++) {
                             const px = i * xStep;
-                            const norm = Math.min(1.0, (st.smoothSpec[i] / 120.0) * gain);
+                            const norm = Math.min(1.0, (st.smoothSpec[i] / peakScale) * gain);
                             const py = specH - norm * usableH;
                             ctx.lineTo(px, py);
                         }
@@ -2349,7 +2411,7 @@
                         ctx.beginPath();
                         for (let i = 0; i < WF_BINS; i++) {
                             const px = i * xStep;
-                            const norm = Math.min(1.0, (st.smoothSpec[i] / 120.0) * gain);
+                            const norm = Math.min(1.0, (st.smoothSpec[i] / peakScale) * gain);
                             const py = specH - norm * usableH;
                             if (i === 0) ctx.moveTo(px, py);
                             else ctx.lineTo(px, py);
