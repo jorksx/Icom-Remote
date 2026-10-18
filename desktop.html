@@ -3467,8 +3467,14 @@
             const hz2 = getActiveVfoHz('2');
             const qf1 = document.getElementById('bm-qfreq-1');
             const qf2 = document.getElementById('bm-qfreq-2');
-            if (qf1) qf1.textContent = hz1 ? (hz1 / 1000000).toFixed(3) + ' MHz' : 'OFF';
-            if (qf2) qf2.textContent = hz2 ? (hz2 / 1000000).toFixed(3) + ' MHz' : 'OFF';
+            if (qf1) {
+                const on1 = radioState['1'] && radioState['1'].online;
+                qf1.textContent = (on1 && hz1) ? (hz1 / 1000000).toFixed(3) + ' MHz' : 'OFF';
+            }
+            if (qf2) {
+                const on2 = radioState['2'] && radioState['2'].online;
+                qf2.textContent = (on2 && hz2) ? (hz2 / 1000000).toFixed(3) + ' MHz' : 'OFF';
+            }
         }
 
         function toggleBookmarksDrawer(forceOpen) {
@@ -3489,19 +3495,24 @@
             const st = radioState[rid];
             if (!st) return 0;
             if (isIc9700(rid)) {
-                return (st.active_band === 1) ? (st.sub_hz || 145000000) : (st.main_hz || 145000000);
+                return (st.active_band === 1) ? (st.sub_hz || st.taajuus_hz || 145000000) : (st.main_hz || st.taajuus_hz || 145000000);
             }
-            return st.vfo_hz || 0;
+            return st.taajuus_hz || 0;
         }
 
         function getActiveMode(rid) {
             const st = radioState[rid];
-            return (st && st.mode) ? st.mode : 'USB';
+            if (!st) return 'USB';
+            if (isIc9700(rid)) {
+                return (st.active_band === 1) ? (st.sub_mode || st.mode || 'FM') : (st.main_mode || st.mode || 'FM');
+            }
+            return st.mode || 'USB';
         }
 
         function quickBookmarkRadio(rid) {
+            const st = radioState[rid];
             const hz = getActiveVfoHz(rid);
-            if (!hz) {
+            if (!hz || !st || (!st.online && !st.connected)) {
                 alert(`Radio ${rid === '1' ? 'IC-7300' : 'IC-9700'} is powered off or frequency unavailable.`);
                 return;
             }
