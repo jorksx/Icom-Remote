@@ -39,12 +39,15 @@ Featuring real-time 2D/3D waterfall spectrum display, bidirectional low-latency 
   - Integrated rigctld TCP servers (default ports `4532` and `4533`).
   - Connect **WSJT-X**, **JTDX**, **FLDigi**, **Log4OM**, or **N1MM** directly over TCP without needing physical CI-V splitters or virtual COM-port pairs.
 
-- **Frequency Bookmarks & Memories:**
-  - Save your favorite frequencies and modes with custom station names.
-  - Quick recall with one click; stored persistently in configuration.
+- **Frequency Bookmarks & Interactive Reordering:**
+  - Save current operating frequencies with one click directly from the radio header or bookmarks drawer (`+ ⭐ Bookmark`).
+  - **Drag-and-Drop Reordering:** Freely rearrange saved station memories with drag handle (`⠿`) or quick `▲` / `▼` step buttons.
+  - Auto-matching to active VFO and band (HF vs VHF/UHF) or manual target radio assignment.
+  - Fully synced and persisted in `icom_config.json` and persistent webview storage.
 
-- **Native Desktop App & System Tray:**
-  - Standalone desktop application window powered by PyWebView.
+- **Dual-Persistence Engine & Desktop App:**
+  - Standalone desktop application window powered by PyWebView with dedicated persistent profile storage.
+  - Waterfall controls (Noise Floor `-30..60`, Gain `10..200`, Peak Ceiling `30..160`, Speed `1x..5x`, and 2D/3D mode) and bookmarks automatically sync to `icom_config.json`.
   - System tray support with clean background operation.
 
 ---
