@@ -102,6 +102,9 @@ def save_wav_dialog_blocking(default_filename: str) -> str:
     return ""
 
 DEFAULT_CONFIG = {
+    "web_pin": "7300",
+    "web_pin_enabled": True,
+    "web_pin_updated": 1729240000,
     "radios": {
         "1": {
             "name": "IC-7300",
@@ -159,6 +162,13 @@ def load_config():
                 conf["radios"]["1"]["baud"] = int(raw.get("baud", 115200))
             save_config(conf)
             return conf
+        # Varmistetaan yleiset asetukset
+        if "web_pin" not in raw:
+            raw["web_pin"] = DEFAULT_CONFIG["web_pin"]
+        if "web_pin_enabled" not in raw:
+            raw["web_pin_enabled"] = DEFAULT_CONFIG["web_pin_enabled"]
+        if "web_pin_updated" not in raw:
+            raw["web_pin_updated"] = DEFAULT_CONFIG["web_pin_updated"]
         # Varmistetaan oletuskentät
         for rid in ("1", "2"):
             if rid not in raw["radios"]:
@@ -2278,12 +2288,59 @@ async def api_wsjtx_status(request):
     })
 
 
+async def api_auth_status(request):
+    pin_enabled = bool(global_config.get("web_pin_enabled", True))
+    pin_val = str(global_config.get("web_pin", "7300")).strip()
+    required = pin_enabled and bool(pin_val)
+    return web.json_response({
+        "pin_required": required,
+        "pin_ver": global_config.get("web_pin_updated", 0)
+    })
+
+
+async def api_auth_verify(request):
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    pin_enabled = bool(global_config.get("web_pin_enabled", True))
+    pin_val = str(global_config.get("web_pin", "7300")).strip()
+    if not pin_enabled or not pin_val:
+        return web.json_response({"status": "ok", "message": "No PIN required"})
+    submitted = str(data.get("pin", "")).strip()
+    if submitted == pin_val:
+        return web.json_response({"status": "ok"})
+    return web.json_response({"status": "error", "message": "Invalid PIN"}, status=401)
+
+
+async def api_web_pin(request):
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({"status": "error", "message": "Invalid JSON"}, status=400)
+    if "web_pin_enabled" in data:
+        global_config["web_pin_enabled"] = bool(data["web_pin_enabled"])
+    if "web_pin" in data:
+        global_config["web_pin"] = str(data["web_pin"]).strip()
+    global_config["web_pin_updated"] = int(time.time())
+    save_config(global_config)
+    return web.json_response({
+        "status": "ok",
+        "web_pin": str(global_config.get("web_pin", "7300")),
+        "web_pin_enabled": bool(global_config.get("web_pin_enabled", True)),
+        "web_pin_updated": global_config.get("web_pin_updated")
+    })
+
+
 def create_app():
     app = web.Application()
     app.add_routes([
         web.get('/', handle_index),
         web.get('/desktop', handle_desktop),
         web.get('/api/ports', api_ports),
+        web.get('/api/auth_status', api_auth_status),
+        web.post('/api/auth_verify', api_auth_verify),
+        web.post('/api/web_pin', api_web_pin),
         web.post('/api/connect', api_connect),
         web.post('/api/disconnect', api_disconnect),
         web.post('/api/config', api_config_update),

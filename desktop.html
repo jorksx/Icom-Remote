@@ -1082,6 +1082,57 @@
             opacity: 1;
             transform: translateY(0);
         }
+
+        /* Web PIN Modal Dialog */
+        .pin-modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.65);
+            backdrop-filter: blur(2px);
+            z-index: 10000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+        .pin-modal-backdrop.open {
+            display: flex;
+        }
+        .pin-modal {
+            background: #181920;
+            border: 1px solid #3b82f6;
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.85), 0 0 20px rgba(59, 130, 246, 0.2);
+            border-radius: 10px;
+            width: 400px;
+            max-width: 92vw;
+            overflow: hidden;
+            animation: pinModalIn 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        @keyframes pinModalIn {
+            from { transform: scale(0.95); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+        .pin-modal-header {
+            padding: 12px 16px;
+            background: #1e2029;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .pin-modal-body {
+            padding: 16px;
+        }
+        .pin-modal-footer {
+            padding: 12px 16px;
+            background: #14151b;
+            border-top: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
     </style>
 </head>
 <body>
@@ -1105,6 +1156,11 @@
             <span class="web-ui-link" onclick="openMobileWebBrowser()" title="Click to open Web / Mobile UI in your default browser">
                 Web / Mobile UI: <code id="mobile-url-label">https://localhost:8085</code>
             </span>
+            <button class="view-btn" id="btn-pin-toggle" onclick="openPinModal()" title="Change or Disable Web / Mobile UI PIN code" style="background:#1e293b; border-color:#3b82f6; color:#93c5fd; font-weight:700; margin-left:8px; display:inline-flex; align-items:center; gap:5px; cursor:pointer;">
+                <span id="pin-btn-icon">🔒</span>
+                <span>PIN:</span>
+                <span id="pin-btn-label" style="font-family:Consolas, monospace; color:#38bdf8;">7300</span>
+            </button>
         </div>
     </div>
 
@@ -1603,6 +1659,49 @@
 
         <!-- Bookmarks Cards List -->
         <div class="bm-list" id="bm-list"></div>
+    </div>
+
+    <!-- Web PIN Settings Modal -->
+    <div id="pin-modal-backdrop" class="pin-modal-backdrop" onclick="onPinBackdropClick(event)">
+        <div class="pin-modal" onclick="event.stopPropagation()">
+            <div class="pin-modal-header">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span id="modal-pin-icon" style="font-size:18px;">🔒</span>
+                    <span style="font-weight:700; font-size:14px; color:#fff;">Web & Mobile UI PIN Code</span>
+                </div>
+                <button class="btn" style="padding:2px 8px; font-size:13px; font-weight:700;" onclick="closePinModal()">✕</button>
+            </div>
+            <div class="pin-modal-body">
+                <p style="font-size:12px; color:#94a3b8; margin:0 0 14px 0; line-height:1.4;">
+                    Set or disable the PIN code required when connecting to the Web and Mobile interface (<code style="color:#93c5fd;">https://&lt;IP&gt;:8085</code>).
+                </p>
+
+                <label style="display:flex; align-items:center; gap:9px; cursor:pointer; font-weight:600; font-size:13px; color:#f1f5f9; margin-bottom:14px; user-select:none;">
+                    <input type="checkbox" id="modal-pin-enable" onchange="onPinEnableChange()" style="width:16px; height:16px; accent-color:#3b82f6; cursor:pointer;">
+                    <span>Require PIN Code on Web UI</span>
+                </label>
+
+                <div id="modal-pin-input-group" style="margin-bottom:14px;">
+                    <label style="display:block; font-size:11px; color:#94a3b8; margin-bottom:5px; text-transform:uppercase; letter-spacing:0.5px; font-weight:600;">PIN Code</label>
+                    <div style="position:relative; display:flex; align-items:center;">
+                        <input type="text" id="modal-pin-value" maxlength="16" placeholder="e.g. 7300" style="width:100%; padding:8px 70px 8px 12px; background:#0f172a; border:1px solid #334155; border-radius:6px; color:#f8fafc; font-family:Consolas, monospace; font-size:17px; letter-spacing:3px; font-weight:700; outline:none;" onfocus="this.style.borderColor='#38bdf8'" onblur="this.style.borderColor='#334155'" onkeypress="if(event.key==='Enter') savePinSettings()">
+                        <button type="button" onclick="generateRandomPin()" title="Generate random 4-digit PIN" style="position:absolute; right:6px; background:#1e293b; border:1px solid #475569; color:#94a3b8; border-radius:4px; padding:4px 8px; font-size:11px; cursor:pointer; font-weight:600;">🎲 Gen</button>
+                    </div>
+                    <span style="font-size:11px; color:#64748b; margin-top:5px; display:block;">Default PIN is <strong>7300</strong>. Enter numbers or characters.</span>
+                </div>
+
+                <div id="modal-pin-disabled-warning" style="display:none; padding:10px 12px; background:rgba(234, 88, 12, 0.12); border:1px solid rgba(234, 88, 12, 0.35); border-radius:6px; font-size:12px; color:#fdba74; margin-bottom:14px; line-height:1.4;">
+                    ⚠️ <strong>PIN Protection Disabled:</strong> Anyone on your local network (WiFi) will be able to access the Web UI immediately without entering a code.
+                </div>
+            </div>
+            <div class="pin-modal-footer">
+                <button class="btn" style="background:#27272a; border-color:#3f3f46; color:#cbd5e1; font-weight:600; padding:6px 14px;" onclick="closePinModal()">Cancel</button>
+                <div style="display:flex; gap:8px;">
+                    <button class="btn" id="modal-btn-quick-disable" onclick="quickTogglePin()" style="background:#1e293b; border-color:#d97706; color:#fbbf24; font-weight:600; padding:6px 12px;">Disable PIN</button>
+                    <button class="btn" style="background:#2563eb; border-color:#3b82f6; color:#fff; font-weight:700; padding:6px 16px;" onclick="savePinSettings()">Save</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Quick Toast Notification -->
@@ -3019,6 +3118,11 @@
                 if (data.web_url) {
                     document.getElementById('mobile-url-label').textContent = data.web_url;
                 }
+                if (data.config) {
+                    if (data.config.web_pin !== undefined || data.config.web_pin_enabled !== undefined) {
+                        updatePinTopButton(data.config.web_pin, data.config.web_pin_enabled);
+                    }
+                }
                 ['1', '2'].forEach(rid => {
                     const sel = document.getElementById(`port-${rid}`);
                     const rconf = (data.config && data.config.radios && data.config.radios[rid]) || {};
@@ -3515,8 +3619,136 @@
         window.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 toggleBookmarksDrawer(false);
+                closePinModal();
             }
         });
+
+        // ==================== WEB UI PIN MANAGEMENT ====================
+        let currentWebPin = '7300';
+        let currentWebPinEnabled = true;
+
+        function updatePinTopButton(pin, enabled) {
+            if (pin !== undefined && pin !== null) currentWebPin = String(pin).trim() || '7300';
+            if (enabled !== undefined && enabled !== null) currentWebPinEnabled = !!enabled;
+
+            const iconEl = document.getElementById('pin-btn-icon');
+            const lblEl = document.getElementById('pin-btn-label');
+            const btnEl = document.getElementById('btn-pin-toggle');
+            if (!iconEl || !lblEl || !btnEl) return;
+
+            if (currentWebPinEnabled) {
+                iconEl.textContent = '🔒';
+                lblEl.textContent = currentWebPin;
+                lblEl.style.color = '#38bdf8';
+                btnEl.title = `Web UI PIN: ${currentWebPin} (Click to change or disable)`;
+            } else {
+                iconEl.textContent = '🔓';
+                lblEl.textContent = 'Disabled';
+                lblEl.style.color = '#94a3b8';
+                btnEl.title = `Web UI PIN: Disabled (Click to enable)`;
+            }
+        }
+
+        function openPinModal() {
+            const backdrop = document.getElementById('pin-modal-backdrop');
+            const chk = document.getElementById('modal-pin-enable');
+            const inp = document.getElementById('modal-pin-value');
+            if (!backdrop || !chk || !inp) return;
+
+            chk.checked = currentWebPinEnabled;
+            inp.value = currentWebPin;
+            onPinEnableChange();
+
+            backdrop.classList.add('open');
+            setTimeout(() => {
+                if (chk.checked) inp.focus();
+            }, 60);
+        }
+
+        function closePinModal() {
+            const backdrop = document.getElementById('pin-modal-backdrop');
+            if (backdrop) backdrop.classList.remove('open');
+        }
+
+        function onPinBackdropClick(e) {
+            if (e.target && e.target.id === 'pin-modal-backdrop') {
+                closePinModal();
+            }
+        }
+
+        function onPinEnableChange() {
+            const chk = document.getElementById('modal-pin-enable');
+            const inGroup = document.getElementById('modal-pin-input-group');
+            const warn = document.getElementById('modal-pin-disabled-warning');
+            const quickBtn = document.getElementById('modal-btn-quick-disable');
+            const modalIcon = document.getElementById('modal-pin-icon');
+            const isEnabled = chk ? chk.checked : true;
+
+            if (modalIcon) modalIcon.textContent = isEnabled ? '🔒' : '🔓';
+            if (inGroup) inGroup.style.display = isEnabled ? 'block' : 'none';
+            if (warn) warn.style.display = isEnabled ? 'none' : 'block';
+            if (quickBtn) {
+                quickBtn.textContent = isEnabled ? 'Disable PIN' : 'Enable PIN';
+                quickBtn.style.color = isEnabled ? '#fbbf24' : '#38bdf8';
+                quickBtn.style.borderColor = isEnabled ? '#d97706' : '#0284c7';
+            }
+        }
+
+        function quickTogglePin() {
+            const chk = document.getElementById('modal-pin-enable');
+            if (!chk) return;
+            chk.checked = !chk.checked;
+            onPinEnableChange();
+            savePinSettings();
+        }
+
+        function generateRandomPin() {
+            const rand = Math.floor(1000 + Math.random() * 9000).toString();
+            const inp = document.getElementById('modal-pin-value');
+            if (inp) {
+                inp.value = rand;
+                inp.focus();
+            }
+        }
+
+        async function savePinSettings() {
+            const chk = document.getElementById('modal-pin-enable');
+            const inp = document.getElementById('modal-pin-value');
+            const isEnabled = chk ? chk.checked : true;
+            let pinVal = inp ? inp.value.trim() : '7300';
+
+            if (isEnabled && !pinVal) {
+                alert('Please enter a PIN code, or uncheck "Require PIN Code" to disable it.');
+                if (inp) inp.focus();
+                return;
+            }
+            if (!pinVal) pinVal = '7300';
+
+            try {
+                const res = await fetch('/api/web_pin', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        web_pin_enabled: isEnabled,
+                        web_pin: pinVal
+                    })
+                });
+                const data = await res.json();
+                if (data.status === 'ok') {
+                    updatePinTopButton(data.web_pin, data.web_pin_enabled);
+                    closePinModal();
+                    if (data.web_pin_enabled) {
+                        showBookmarkToast(`Web UI PIN set to: ${data.web_pin}`);
+                    } else {
+                        showBookmarkToast(`Web UI PIN protection disabled`);
+                    }
+                } else {
+                    alert('Failed to save PIN settings: ' + (data.message || 'Unknown error'));
+                }
+            } catch (err) {
+                alert('Connection error saving PIN: ' + err.message);
+            }
+        }
 
         // ==================== WEBSOCKET ====================
         let ws = null;

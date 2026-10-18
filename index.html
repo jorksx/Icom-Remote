@@ -576,32 +576,66 @@
         let valittuRadioId = localStorage.getItem('selectedRadioId') || '1';
         let kaikkienRadioidenTilat = {};
 
-        function tarkistaKirjautuminen() {
+        let authStatus = { pin_required: true, pin_ver: 0 };
+
+        async function tarkistaKirjautuminen() {
+            try {
+                const res = await fetch('/api/auth_status');
+                authStatus = await res.json();
+            } catch (e) {
+                console.warn('Auth status check error:', e);
+            }
+
+            if (!authStatus.pin_required) {
+                aloitaRadio();
+                return;
+            }
+
             const expiry = localStorage.getItem('loginExpiry');
-            if (expiry && Date.now() < parseInt(expiry)) {
-                localStorage.setItem('loginExpiry', Date.now() + 3600000);
+            const savedVer = localStorage.getItem('loginPinVer');
+            const currentVer = String(authStatus.pin_ver || 0);
+
+            if (expiry && Date.now() < parseInt(expiry) && savedVer === currentVer) {
                 aloitaRadio();
             } else {
                 document.getElementById('login-overlay').style.display = 'flex';
                 document.getElementById('radio-ui').style.display = 'none';
                 
                 const pinInput = document.getElementById('login-pin');
-                pinInput.focus();
-                pinInput.onkeypress = (e) => { if (e.key === 'Enter') kirjauduSisaan(); };
+                if (pinInput) {
+                    pinInput.value = "";
+                    pinInput.focus();
+                    pinInput.onkeypress = (e) => { if (e.key === 'Enter') kirjauduSisaan(); };
+                }
             }
         }
 
-        function kirjauduSisaan() {
-            const koodi = document.getElementById('login-pin').value;
-            if (koodi === "7300") {
-                localStorage.setItem('loginExpiry', Date.now() + 3600000);
-                aloitaRadio();
-            } else {
-                const err = document.getElementById('login-err');
-                err.style.display = 'block';
-                document.getElementById('login-pin').value = "";
-                setTimeout(() => err.style.display = 'none', 2000);
+        async function kirjauduSisaan() {
+            const pinInput = document.getElementById('login-pin');
+            const koodi = pinInput ? pinInput.value.trim() : "";
+            const err = document.getElementById('login-err');
+            if (!koodi) return;
+
+            try {
+                const res = await fetch('/api/auth_verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pin: koodi })
+                });
+                const data = await res.json();
+                if (data.status === 'ok') {
+                    localStorage.setItem('loginExpiry', Date.now() + (3600000 * 24 * 7));
+                    localStorage.setItem('loginPinVer', String(authStatus.pin_ver || 0));
+                    aloitaRadio();
+                    return;
+                }
+            } catch (e) {
+                console.error('Login verify error:', e);
             }
+
+            if (err) err.style.display = 'block';
+            if (pinInput) pinInput.value = "";
+            setTimeout(() => { if (err) err.style.display = 'none'; }, 2000);
         }
 
         function paivitaRadioTabit() {
