@@ -985,13 +985,14 @@
             background: #1a1b24;
             border: 1px solid var(--border);
             border-radius: 5px;
-            padding: 8px 10px;
+            padding: 7px 9px;
             cursor: pointer;
-            transition: all 0.15s ease;
+            transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 8px;
+            user-select: none;
         }
         .bm-card:hover {
             background: #232533;
@@ -1001,6 +1002,34 @@
         .bm-card.tuned {
             border-color: #22c55e !important;
             background: rgba(34, 197, 94, 0.18) !important;
+        }
+        .bm-card.dragging {
+            opacity: 0.35;
+            background: #2b3044 !important;
+            border: 1px dashed var(--accent) !important;
+        }
+        .bm-card.drag-over-top {
+            border-top: 2px solid #38bdf8 !important;
+        }
+        .bm-card.drag-over-bottom {
+            border-bottom: 2px solid #38bdf8 !important;
+        }
+        .bm-drag-handle {
+            color: #52525b;
+            font-size: 15px;
+            padding: 2px 4px 2px 0;
+            cursor: grab;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: color 0.15s;
+        }
+        .bm-drag-handle:hover {
+            color: #38bdf8;
+        }
+        .bm-card:active .bm-drag-handle {
+            cursor: grabbing;
         }
         .bm-card-info {
             display: flex;
@@ -1045,16 +1074,42 @@
             font-size: 9.5px;
             font-weight: 600;
         }
+        .bm-actions {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+        }
+        .bm-move-btn {
+            background: transparent;
+            border: none;
+            color: #71717a;
+            font-size: 10px;
+            cursor: pointer;
+            padding: 3px 5px;
+            border-radius: 3px;
+            line-height: 1;
+            transition: all 0.1s;
+        }
+        .bm-move-btn:hover:not(:disabled) {
+            color: #38bdf8;
+            background: rgba(56, 189, 248, 0.15);
+        }
+        .bm-move-btn:disabled {
+            opacity: 0.2;
+            cursor: default;
+        }
         .bm-del-btn {
             background: transparent;
             border: none;
             color: #71717a;
-            font-size: 15px;
+            font-size: 14px;
             font-weight: 700;
             cursor: pointer;
-            padding: 3px 6px;
+            padding: 3px 5px;
             border-radius: 3px;
             line-height: 1;
+            margin-left: 2px;
+            transition: all 0.1s;
         }
         .bm-del-btn:hover {
             color: #ef4444;
@@ -3587,7 +3642,85 @@
         function deleteBookmark(e, id) {
             if (e) e.stopPropagation();
             bookmarks = bookmarks.filter(b => b.id !== id);
-            saveBookmarks();
+            saveBookmarks(true);
+            renderBookmarksList();
+        }
+
+        let draggedBmId = null;
+
+        function onBmDragStart(e, id) {
+            draggedBmId = id;
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', id);
+            setTimeout(() => {
+                const el = document.getElementById(`bm-card-${id}`);
+                if (el) el.classList.add('dragging');
+            }, 0);
+        }
+
+        function onBmDragOver(e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            const card = e.currentTarget;
+            if (!card) return;
+            const rect = card.getBoundingClientRect();
+            const relY = e.clientY - rect.top;
+            if (relY < rect.height / 2) {
+                card.classList.add('drag-over-top');
+                card.classList.remove('drag-over-bottom');
+            } else {
+                card.classList.add('drag-over-bottom');
+                card.classList.remove('drag-over-top');
+            }
+        }
+
+        function onBmDragLeave(e) {
+            const card = e.currentTarget;
+            if (card) {
+                card.classList.remove('drag-over-top', 'drag-over-bottom');
+            }
+        }
+
+        function onBmDrop(e, targetId) {
+            e.preventDefault();
+            const card = e.currentTarget;
+            if (card) card.classList.remove('drag-over-top', 'drag-over-bottom');
+            if (!draggedBmId || draggedBmId === targetId) return;
+
+            const fromIdx = bookmarks.findIndex(b => b.id === draggedBmId);
+            if (fromIdx === -1) return;
+            const item = bookmarks.splice(fromIdx, 1)[0];
+
+            let toIdx = bookmarks.findIndex(b => b.id === targetId);
+            if (toIdx === -1) {
+                bookmarks.push(item);
+            } else {
+                const rect = card.getBoundingClientRect();
+                const placeAfter = (e.clientY - rect.top) >= (rect.height / 2);
+                if (placeAfter) toIdx++;
+                bookmarks.splice(toIdx, 0, item);
+            }
+
+            saveBookmarks(true);
+            renderBookmarksList();
+        }
+
+        function onBmDragEnd(e) {
+            draggedBmId = null;
+            document.querySelectorAll('.bm-card').forEach(el => {
+                el.classList.remove('dragging', 'drag-over-top', 'drag-over-bottom');
+            });
+        }
+
+        function moveBookmark(e, id, delta) {
+            if (e) e.stopPropagation();
+            const idx = bookmarks.findIndex(b => b.id === id);
+            if (idx === -1) return;
+            const targetIdx = idx + delta;
+            if (targetIdx < 0 || targetIdx >= bookmarks.length) return;
+            const item = bookmarks.splice(idx, 1)[0];
+            bookmarks.splice(targetIdx, 0, item);
+            saveBookmarks(true);
             renderBookmarksList();
         }
 
@@ -3648,11 +3781,23 @@
             }
 
             listEl.innerHTML = filtered.map(bm => {
+                const realIdx = bookmarks.findIndex(b => b.id === bm.id);
+                const isFirst = (realIdx === 0);
+                const isLast = (realIdx === bookmarks.length - 1);
                 const mhz = (bm.hz / 1000000).toFixed(3);
                 const radioLbl = (bm.radio_id === '1') ? 'IC-7300' : (bm.radio_id === '2') ? 'IC-9700' : 'AUTO';
                 const bmJson = JSON.stringify(bm).replace(/"/g, '&quot;');
                 return `
-                <div class="bm-card" onclick="tuneToBookmark(${bmJson}, this)" title="Click to tune radio to this frequency">
+                <div class="bm-card" id="bm-card-${bm.id}"
+                     draggable="true"
+                     ondragstart="onBmDragStart(event, '${bm.id}')"
+                     ondragover="onBmDragOver(event)"
+                     ondragleave="onBmDragLeave(event)"
+                     ondrop="onBmDrop(event, '${bm.id}')"
+                     ondragend="onBmDragEnd(event)"
+                     onclick="tuneToBookmark(${bmJson}, this)"
+                     title="Click to tune / Drag ⠿ to reorder">
+                    <div class="bm-drag-handle" title="Drag to reorder">⠿</div>
                     <div class="bm-card-info">
                         <div class="bm-card-name">${escapeHtml(bm.name)}</div>
                         <div class="bm-card-meta">
@@ -3661,7 +3806,11 @@
                             <span class="bm-radio-tag">${radioLbl}</span>
                         </div>
                     </div>
-                    <button class="bm-del-btn" onclick="deleteBookmark(event, '${bm.id}')" title="Delete bookmark">✕</button>
+                    <div class="bm-actions" onclick="event.stopPropagation()">
+                        <button type="button" class="bm-move-btn" onclick="moveBookmark(event, '${bm.id}', -1)" title="Move Up" ${isFirst ? 'disabled' : ''}>▲</button>
+                        <button type="button" class="bm-move-btn" onclick="moveBookmark(event, '${bm.id}', 1)" title="Move Down" ${isLast ? 'disabled' : ''}>▼</button>
+                        <button type="button" class="bm-del-btn" onclick="deleteBookmark(event, '${bm.id}')" title="Delete bookmark">✕</button>
+                    </div>
                 </div>`;
             }).join('');
         }
