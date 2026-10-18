@@ -322,8 +322,10 @@ class RadioController:
             try:
                 # 27 10 01 = Scope waveform data stream ON (IC-7300 & IC-9700)
                 # 27 11 01 = Scope CI-V data output ON (IC-9700 CI-V setting)
+                # 27 14 00 = Scope sweep speed FAST (00=FAST, 01=MID, 02=SLOW)
                 self.ser.write(civ_command(0x27, 0x10, bytes([0x01]), to_addr=self.radio_addr))
                 self.ser.write(civ_command(0x27, 0x11, bytes([0x01]), to_addr=self.radio_addr))
+                self.ser.write(civ_command(0x27, 0x14, bytes([0x00]), to_addr=self.radio_addr))
             except Exception:
                 pass
 

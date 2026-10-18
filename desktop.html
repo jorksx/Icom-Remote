@@ -1948,54 +1948,47 @@
         // ==================== NATIVE 1:1 PIXEL SHARP SPECTRUM, YAESU 3D WATERFALL & 2D WATERFALL ENGINE ====================
         const WF_BINS = 475;
         const WF3D_SLICES = 140;
-        const WF3D_STEP_FRAMES = 4; // 140 slices * 4 frames (132ms) = ~18.5 seconds of 3D history (20x slower than before)
         const wfColorLUT = new Array(256);
         (function initLUT() {
             for (let v = 0; v < 256; v++) {
                 let r = 0, g = 0, b = 0;
-                if (v < 15) {
-                    // 0..14: Clean Deep Black/Navy Noise Floor (#03050a -> #070e1e)
-                    const t = v / 14;
-                    r = Math.floor(3 + t * 4);
-                    g = Math.floor(5 + t * 9);
-                    b = Math.floor(10 + t * 20);
-                } else if (v < 50) {
-                    // 15..49: Weak Signals - High Contrast Knee!
-                    // Deep Navy -> Electric Cobalt -> Vivid Royal Blue (#070e1e -> #1d4ed8 -> #0284c7)
-                    const t = (v - 15) / 35;
-                    r = Math.floor(7 + t * 20);
-                    g = Math.floor(14 + t * 118);
-                    b = Math.floor(30 + t * 170);
-                } else if (v < 95) {
-                    // 50..94: Readable Signals - Electric Cyan & Aquamarine (#0284c7 -> #06b6d4 -> #10b981)
-                    const t = (v - 50) / 45;
-                    r = Math.floor(27 * (1 - t * 0.4) + t * 16);
-                    g = Math.floor(132 + t * 80);
-                    b = Math.floor(200 - t * 71);
-                } else if (v < 145) {
-                    // 95..144: Solid Signals - Vivid Emerald Green -> Vibrant Lime Yellow (#10b981 -> #84cc16 -> #eab308)
-                    const t = (v - 95) / 50;
-                    r = Math.floor(16 + t * 218);
-                    g = Math.floor(212 - t * 33);
-                    b = Math.floor(129 * (1 - t * 0.95));
-                } else if (v < 195) {
-                    // 145..194: Strong Signals - Pure Golden Yellow -> Bright Fiery Orange (#eab308 -> #f97316 -> #ea580c)
-                    const t = (v - 145) / 50;
-                    r = Math.floor(234 + t * 15);
-                    g = Math.floor(179 - t * 91);
-                    b = Math.floor(8 * (1 - t));
-                } else if (v < 235) {
-                    // 195..234: Heavy Signals - Fiery Orange -> Saturated Crimson Red (#ea580c -> #dc2626 -> #ef4444)
-                    const t = (v - 195) / 40;
-                    r = Math.floor(234 + t * 5);
-                    g = Math.floor(88 - t * 20);
-                    b = Math.floor(12 + t * 56);
+                if (v < 20) {
+                    // 0..19: Deep Space Black to Dark Midnight Blue (Noise Floor)
+                    const t = v / 19;
+                    r = Math.floor(2 + t * 4);
+                    g = Math.floor(4 + t * 8);
+                    b = Math.floor(10 + t * 25);
+                } else if (v < 60) {
+                    // 20..59: Weak DX Signals - High Contrast Knee!
+                    // Deep Midnight -> Electric Cobalt -> Vivid Royal Blue (#06235f -> #14aafe)
+                    const t = (v - 20) / 40;
+                    r = Math.floor(6 + t * 14);
+                    g = Math.floor(35 + t * 135);
+                    b = Math.floor(95 + t * 155);
+                } else if (v < 110) {
+                    // 60..109: Readable Signals - Electric Sky Blue -> Vivid Spring Green
+                    const t = (v - 60) / 50;
+                    r = Math.floor(20 + t * 14);
+                    g = Math.floor(170 + t * 50);
+                    b = Math.floor(250 - t * 200);
+                } else if (v < 170) {
+                    // 110..169: Solid Signals - Vivid Emerald Green -> Brilliant Amber Yellow
+                    const t = (v - 110) / 60;
+                    r = Math.floor(34 + t * 216);
+                    g = Math.floor(220 - t * 30);
+                    b = Math.floor(50 * (1 - t));
+                } else if (v < 225) {
+                    // 170..224: Heavy Signals - Amber Yellow -> Fiery Crimson Red
+                    const t = (v - 170) / 55;
+                    r = Math.floor(250 - t * 15);
+                    g = Math.floor(190 - t * 150);
+                    b = Math.floor(t * 30);
                 } else {
-                    // 235..255: Overload / Peak Cores - Blazing Red -> Brilliant White-Hot (#ef4444 -> #ffffff)
-                    const t = (v - 235) / 20;
+                    // 225..255: Overload / Peak Cores - Crimson -> Brilliant White-Hot
+                    const t = (v - 225) / 30;
                     r = 255;
-                    g = Math.floor(68 + t * 187);
-                    b = Math.floor(68 + t * 187);
+                    g = Math.floor(40 + t * 215);
+                    b = Math.floor(30 + t * 225);
                 }
                 wfColorLUT[v] = [r, g, b];
             }
@@ -2007,7 +2000,7 @@
             offscreen.height = 300;
             const offCtx = offscreen.getContext('2d', { alpha: false });
             offCtx.imageSmoothingEnabled = false;
-            offCtx.fillStyle = '#03050a';
+            offCtx.fillStyle = '#02040a';
             offCtx.fillRect(0, 0, 640, 300);
 
             const history3D = [];
@@ -2035,9 +2028,15 @@
                 smoothSpec: new Float32Array(WF_BINS),
                 smooth3D: new Float32Array(WF_BINS),
                 wfCoherent: new Float32Array(WF_BINS),
+                latestRaw: new Float32Array(WF_BINS),
+                currentSweep: new Float32Array(WF_BINS),
+                effectiveFloor: 0,
+                dynSpan: 50,
+                p20: 25,
+                lastScrollTime: performance.now(),
+                last3DTime: performance.now(),
                 history3D,
                 histHead: 0,
-                tick3D: 0,
                 topMode: (savedMode === 'spectrum') ? 'spectrum' : '3d',
                 hasData: false,
                 floor: floor,
@@ -2189,19 +2188,21 @@
             }
             st.rawSortBuf.subarray(0, len).sort();
             const p20 = st.rawSortBuf[Math.floor(len * 0.20)];
+            st.p20 = p20;
 
-            // Floor offset from slider: -30 to +50 (default 0)
             const floorOffset = (st.floor !== undefined) ? st.floor : 0;
             const effectiveFloor = Math.max(0, p20 + floorOffset);
-
-            // Dynamic span: Peak (20..150) scaled by Gain (5..200)
             const gainVal = Math.max(5, (st.gain !== undefined) ? st.gain : 60);
             const peakVal = Math.max(20, (st.peak !== undefined) ? st.peak : 65);
             const dynSpan = Math.max(8.0, (peakVal * 100.0) / gainVal);
+            st.effectiveFloor = effectiveFloor;
+            st.dynSpan = dynSpan;
 
-            // 2. Compute processed amplitudes for 2D Spectrum & 3D Waterfall
+            // 2. Ingest raw amplitudes and update coherent envelopes for 2D spectrum & 3D waterfall
             for (let i = 0; i < len; i++) {
                 const raw = dataArr[i];
+                st.latestRaw[i] = raw;
+
                 const aboveFloor = Math.max(0, raw - effectiveFloor);
                 st.wfCoherent[i] = aboveFloor;
 
@@ -2211,74 +2212,9 @@
                 st.targetSpec[i] = specVal;
 
                 if (!st.hasData) {
+                    st.currentSweep[i] = raw;
                     st.smoothSpec[i] = specVal;
                     st.smooth3D[i] = aboveFloor;
-                }
-            }
-
-            // 3. Render scanline into offscreen waterfall at configured speed
-            const canvas = document.getElementById(`wf-canvas-${rid}`);
-            if (canvas && canvas.width > 10 && canvas.height > 10) {
-                const w = canvas.width;
-                const dpr = Math.min(2, window.devicePixelRatio || 1);
-                const specH = Math.floor(canvas.height * 0.28);
-                const scaleH = Math.round(18 * dpr);
-                const wfTop = specH + scaleH;
-                const wfH = Math.max(64, canvas.height - wfTop);
-
-                ensureOffscreenSize(st, w, wfH);
-
-                const rowPixels = st.rowImg.data;
-                const binScale = (len - 1) / Math.max(1, w - 1);
-
-                for (let x = 0; x < w; x++) {
-                    const fIdx = x * binScale;
-                    const i1 = Math.min(len - 1, fIdx | 0);
-                    const i0 = Math.max(0, i1 - 1);
-                    const i2 = Math.min(len - 1, i1 + 1);
-                    const i3 = Math.min(len - 1, i1 + 2);
-                    const t = fIdx - i1;
-
-                    const y0 = dataArr[i0];
-                    const y1 = dataArr[i1];
-                    const y2 = dataArr[i2];
-                    const y3 = dataArr[i3];
-
-                    // Catmull-Rom spline interpolation (exact peaks, smooth sub-pixel curve)
-                    const a = -0.5 * y0 + 1.5 * y1 - 1.5 * y2 + 0.5 * y3;
-                    const b = y0 - 2.5 * y1 + 2.0 * y2 - 0.5 * y3;
-                    const c = -0.5 * y0 + 0.5 * y2;
-                    const d = y1;
-                    let rawVal = ((a * t + b) * t + c) * t + d;
-                    if (rawVal < 0) rawVal = 0;
-
-                    let lutIdx;
-                    if (rawVal <= effectiveFloor) {
-                        // Subtle dark navy noise floor texture (index 0..14)
-                        const nFrac = Math.max(0, Math.min(1.0, rawVal / Math.max(1, effectiveFloor)));
-                        lutIdx = Math.floor(nFrac * 14);
-                    } else {
-                        // High-contrast signal emergence (index 15..255)
-                        const eff = rawVal - effectiveFloor;
-                        const norm = Math.min(1.0, eff / dynSpan);
-                        const shaped = Math.pow(norm, 0.85);
-                        lutIdx = Math.min(255, Math.floor(15 + shaped * 240));
-                    }
-
-                    const rgb = wfColorLUT[lutIdx];
-                    const p = x * 4;
-                    rowPixels[p] = rgb[0];
-                    rowPixels[p + 1] = rgb[1];
-                    rowPixels[p + 2] = rgb[2];
-                    rowPixels[p + 3] = 255;
-                }
-
-                // Scroll down by speed pixels (1 to 5) with zero blur
-                const speed = Math.max(1, Math.min(5, st.speed || 2));
-                st.offCtx.imageSmoothingEnabled = false;
-                st.offCtx.drawImage(st.offscreen, 0, 0, w, wfH - speed, 0, speed, w, wfH - speed);
-                for (let k = 0; k < speed; k++) {
-                    st.offCtx.putImageData(st.rowImg, 0, k);
                 }
             }
 
@@ -2355,7 +2291,80 @@
                     const gain = (st.gain !== undefined ? st.gain : 60) / 60.0;
                     const peakScale = Math.max(20, (st.peak !== undefined ? st.peak : 65));
 
-                    // Update per-bin display state:
+                    // 1. Smooth 1-pixel constant-cadence Waterfall scrolling (no jerky packet jumps!)
+                    const SPEED_INTERVALS = [0, 65, 40, 25, 15, 10]; // ms per 1-pixel scroll
+                    const spd = Math.max(1, Math.min(5, st.speed || 2));
+                    const interval = SPEED_INTERVALS[spd] || 40;
+                    const now = performance.now();
+                    const dt = now - st.lastScrollTime;
+
+                    if (dt > 400) {
+                        st.lastScrollTime = now;
+                    } else if (dt >= interval) {
+                        const steps = Math.min(4, Math.floor(dt / interval));
+                        st.lastScrollTime = now - (dt % interval);
+
+                        const floorOffset = (st.floor !== undefined) ? st.floor : 0;
+                        const effFloor = Math.max(0, st.p20 + floorOffset);
+                        const gainVal = Math.max(5, (st.gain !== undefined) ? st.gain : 60);
+                        const peakVal = Math.max(20, (st.peak !== undefined) ? st.peak : 65);
+                        const dSpan = Math.max(8.0, (peakVal * 100.0) / gainVal);
+
+                        for (let s = 0; s < steps; s++) {
+                            // Exponential blend towards latest raw radio sweep
+                            for (let i = 0; i < WF_BINS; i++) {
+                                st.currentSweep[i] += (st.latestRaw[i] - st.currentSweep[i]) * 0.40;
+                            }
+
+                            const rowPixels = st.rowImg.data;
+                            const binScale = (WF_BINS - 1) / Math.max(1, w - 1);
+
+                            for (let x = 0; x < w; x++) {
+                                const fIdx = x * binScale;
+                                const i1 = Math.min(WF_BINS - 1, fIdx | 0);
+                                const i0 = Math.max(0, i1 - 1);
+                                const i2 = Math.min(WF_BINS - 1, i1 + 1);
+                                const i3 = Math.min(WF_BINS - 1, i1 + 2);
+                                const t = fIdx - i1;
+
+                                const y0 = st.currentSweep[i0];
+                                const y1 = st.currentSweep[i1];
+                                const y2 = st.currentSweep[i2];
+                                const y3 = st.currentSweep[i3];
+
+                                const a = -0.5 * y0 + 1.5 * y1 - 1.5 * y2 + 0.5 * y3;
+                                const b = y0 - 2.5 * y1 + 2.0 * y2 - 0.5 * y3;
+                                const c = -0.5 * y0 + 0.5 * y2;
+                                const d = y1;
+                                let rawVal = ((a * t + b) * t + c) * t + d;
+                                if (rawVal < 0) rawVal = 0;
+
+                                let lutIdx;
+                                if (rawVal <= effFloor) {
+                                    const nFrac = Math.max(0, Math.min(1.0, rawVal / Math.max(1, effFloor)));
+                                    lutIdx = Math.floor(nFrac * 19);
+                                } else {
+                                    const eff = rawVal - effFloor;
+                                    const norm = Math.min(1.0, eff / dSpan);
+                                    const shaped = Math.pow(norm, 0.72);
+                                    lutIdx = Math.min(255, Math.floor(20 + shaped * 235));
+                                }
+
+                                const rgb = wfColorLUT[lutIdx];
+                                const p = x * 4;
+                                rowPixels[p] = rgb[0];
+                                rowPixels[p + 1] = rgb[1];
+                                rowPixels[p + 2] = rgb[2];
+                                rowPixels[p + 3] = 255;
+                            }
+
+                            st.offCtx.imageSmoothingEnabled = false;
+                            st.offCtx.drawImage(st.offscreen, 0, 0, w, wfH - 1, 0, 1, w, wfH - 1);
+                            st.offCtx.putImageData(st.rowImg, 0, 0);
+                        }
+                    }
+
+                    // 2. Update per-bin display state for spectrum & 3D:
                     for (let i = 0; i < WF_BINS; i++) {
                         const tgtS = st.targetSpec[i];
                         const sAlpha = tgtS > st.smoothSpec[i] ? 0.55 : 0.35;
@@ -2368,8 +2377,12 @@
                         if (st.smooth3D[i] < 0.4) st.smooth3D[i] = 0;
                     }
 
-                    // Advance 3D waterfall history slowly (1 new slice every 4 frames = ~18.5 seconds total depth)
-                    if (st.tick3D === 0) {
+                    // 3. Advance 3D waterfall history smoothly based on elapsed time (~18.5 seconds depth)
+                    const now3D = performance.now();
+                    if (!st.last3DTime) st.last3DTime = now3D;
+                    const dt3D = now3D - st.last3DTime;
+                    if (dt3D >= 130) {
+                        st.last3DTime = now3D - (dt3D % 130);
                         st.histHead = (st.histHead - 1 + WF3D_SLICES) % WF3D_SLICES;
                         const newestSlice = st.history3D[st.histHead];
                         for (let i = 0; i < WF_BINS; i++) {
@@ -2379,8 +2392,7 @@
                             newestSlice[i] = c * 0.60 + (l + r) * 0.20;
                         }
                     }
-                    const subShift = st.tick3D / WF3D_STEP_FRAMES;
-                    st.tick3D = (st.tick3D + 1) % WF3D_STEP_FRAMES;
+                    const subShift = Math.min(1.0, (now3D - st.last3DTime) / 130.0);
 
                     if (!is3D) {
                         // Draw crisp 475-bin 2D Spectrum (no horizontal spline mush, calm noise floor)
@@ -2553,7 +2565,12 @@
                 }
             });
         }
-        setInterval(renderWaterfallsLoop, 33);
+
+        function animWaterfallsLoop() {
+            renderWaterfallsLoop();
+            requestAnimationFrame(animWaterfallsLoop);
+        }
+        requestAnimationFrame(animWaterfallsLoop);
 
         // ==================== UI STATE RENDERING ====================
         function detectBandName(model9700, hz) {
