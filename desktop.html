@@ -1248,7 +1248,8 @@
                         <input type="range" id="wf-filter-1" min="0" max="100" value="25" title="Filter: 0 = Max Sensitivity (show all weak signals), 100 = Heavy noise reduction" oninput="setWfFilter('1', this.value)">
                         <span id="wf-filter-val-1" style="min-width: 18px; font-size: 10px; color: var(--accent); font-weight: 600;">25</span>
                         <span title="Waterfall contrast / brightness">Gain:</span>
-                        <input type="range" id="wf-gain-1" min="50" max="220" value="105" title="Waterfall Gain" oninput="setWfGain('1', this.value)">
+                        <input type="range" id="wf-gain-1" min="30" max="250" value="110" title="Waterfall Gain / Contrast" oninput="setWfGain('1', this.value)">
+                        <span id="wf-gain-val-1" style="min-width: 22px; font-size: 10px; color: var(--accent); font-weight: 600;">110</span>
                     </div>
                 </div>
                 <div class="wf-canvas-wrap" id="wf-wrap-1">
@@ -1457,7 +1458,8 @@
                         <input type="range" id="wf-filter-2" min="0" max="100" value="25" title="Filter: 0 = Max Sensitivity (show all weak signals), 100 = Heavy noise reduction" oninput="setWfFilter('2', this.value)">
                         <span id="wf-filter-val-2" style="min-width: 18px; font-size: 10px; color: var(--accent); font-weight: 600;">25</span>
                         <span title="Waterfall contrast / brightness">Gain:</span>
-                        <input type="range" id="wf-gain-2" min="50" max="220" value="105" title="Waterfall Gain" oninput="setWfGain('2', this.value)">
+                        <input type="range" id="wf-gain-2" min="30" max="250" value="110" title="Waterfall Gain / Contrast" oninput="setWfGain('2', this.value)">
+                        <span id="wf-gain-val-2" style="min-width: 22px; font-size: 10px; color: var(--accent); font-weight: 600;">110</span>
                     </div>
                 </div>
                 <div class="wf-canvas-wrap" id="wf-wrap-2">
@@ -1925,42 +1927,49 @@
         (function initLUT() {
             for (let v = 0; v < 256; v++) {
                 let r = 0, g = 0, b = 0;
-                if (v < 12) {
-                    // Deep dark SDR background floor (#05070e -> #091020)
-                    const t = v / 12;
-                    r = Math.floor(5 + t * 4);
-                    g = Math.floor(7 + t * 9);
-                    b = Math.floor(14 + t * 18);
-                } else if (v < 64) {
-                    // Weak signals & SSB harmonic valleys: Deep Navy -> Crisp Cobalt Blue (#091020 -> #2563eb)
-                    const t = (v - 12) / 52;
-                    r = Math.floor(9 + t * 28);
-                    g = Math.floor(16 + t * 83);
-                    b = Math.floor(32 + t * 203);
-                } else if (v < 122) {
-                    // Moderate signals: Cobalt Blue -> Razor-Sharp Cyan (#2563eb -> #06b6d4 -> #22d3ee)
-                    const t = (v - 64) / 58;
-                    r = Math.floor(37 * (1 - t * 0.45));
-                    g = Math.floor(99 + t * 115);
-                    b = Math.floor(235 + t * 5);
-                } else if (v < 176) {
-                    // Strong signal ridges: Cyan -> Lime -> Crisp Yellow (#22d3ee -> #fde047)
-                    const t = (v - 122) / 54;
-                    r = Math.floor(20 + t * 233);
-                    g = Math.floor(214 + t * 10);
-                    b = Math.floor(240 * (1 - t * 0.85));
-                } else if (v < 226) {
-                    // Very strong peaks: Yellow -> Orange -> Sharp Red (#fde047 -> #ef4444)
-                    const t = (v - 176) / 50;
-                    r = 253;
-                    g = Math.floor(224 * (1 - t * 0.75));
-                    b = Math.floor(36 * (1 - t));
+                if (v < 15) {
+                    // 0..14: Clean Deep Black/Navy Noise Floor (#03050a -> #070e1e)
+                    const t = v / 14;
+                    r = Math.floor(3 + t * 4);
+                    g = Math.floor(5 + t * 9);
+                    b = Math.floor(10 + t * 20);
+                } else if (v < 50) {
+                    // 15..49: Weak Signals - High Contrast Knee!
+                    // Deep Navy -> Electric Cobalt -> Vivid Royal Blue (#070e1e -> #1d4ed8 -> #0284c7)
+                    const t = (v - 15) / 35;
+                    r = Math.floor(7 + t * 20);
+                    g = Math.floor(14 + t * 118);
+                    b = Math.floor(30 + t * 170);
+                } else if (v < 95) {
+                    // 50..94: Readable Signals - Electric Cyan & Aquamarine (#0284c7 -> #06b6d4 -> #10b981)
+                    const t = (v - 50) / 45;
+                    r = Math.floor(27 * (1 - t * 0.4) + t * 16);
+                    g = Math.floor(132 + t * 80);
+                    b = Math.floor(200 - t * 71);
+                } else if (v < 145) {
+                    // 95..144: Solid Signals - Vivid Emerald Green -> Vibrant Lime Yellow (#10b981 -> #84cc16 -> #eab308)
+                    const t = (v - 95) / 50;
+                    r = Math.floor(16 + t * 218);
+                    g = Math.floor(212 - t * 33);
+                    b = Math.floor(129 * (1 - t * 0.95));
+                } else if (v < 195) {
+                    // 145..194: Strong Signals - Pure Golden Yellow -> Bright Fiery Orange (#eab308 -> #f97316 -> #ea580c)
+                    const t = (v - 145) / 50;
+                    r = Math.floor(234 + t * 15);
+                    g = Math.floor(179 - t * 91);
+                    b = Math.floor(8 * (1 - t));
+                } else if (v < 235) {
+                    // 195..234: Heavy Signals - Fiery Orange -> Saturated Crimson Red (#ea580c -> #dc2626 -> #ef4444)
+                    const t = (v - 195) / 40;
+                    r = Math.floor(234 + t * 5);
+                    g = Math.floor(88 - t * 20);
+                    b = Math.floor(12 + t * 56);
                 } else {
-                    // Extreme peak core: Red -> White-Hot Core
-                    const t = (v - 226) / 29;
+                    // 235..255: Overload / Peak Cores - Blazing Red -> Brilliant White-Hot (#ef4444 -> #ffffff)
+                    const t = (v - 235) / 20;
                     r = 255;
-                    g = Math.floor(56 + t * 195);
-                    b = Math.floor(t * 220);
+                    g = Math.floor(68 + t * 187);
+                    b = Math.floor(68 + t * 187);
                 }
                 wfColorLUT[v] = [r, g, b];
             }
@@ -1971,7 +1980,8 @@
             offscreen.width = 640;
             offscreen.height = 300;
             const offCtx = offscreen.getContext('2d', { alpha: false });
-            offCtx.fillStyle = '#05070e';
+            offCtx.imageSmoothingEnabled = false;
+            offCtx.fillStyle = '#03050a';
             offCtx.fillRect(0, 0, 640, 300);
 
             const history3D = [];
@@ -1981,7 +1991,7 @@
 
             const savedMode = localStorage.getItem(`icom_top_scope_mode_v3_${rid}`) || '3d';
             const savedGain = parseInt(localStorage.getItem(`icom_wf_gain_v1_${rid}`), 10);
-            const gain = !isNaN(savedGain) ? (savedGain / 100) : 1.05;
+            const gain = !isNaN(savedGain) ? (savedGain / 100) : 1.10;
             const savedFilter = parseInt(localStorage.getItem(`icom_wf_filter_v1_${rid}`), 10);
             const filter = !isNaN(savedFilter) ? savedFilter : 25;
 
@@ -1995,8 +2005,6 @@
                 smoothSpec: new Float32Array(WF_BINS),
                 smooth3D: new Float32Array(WF_BINS),
                 wfCoherent: new Float32Array(WF_BINS),
-                wfTransient: new Float32Array(WF_BINS),
-                wfDisplay: new Float32Array(WF_BINS),
                 history3D,
                 histHead: 0,
                 tick3D: 0,
@@ -2027,8 +2035,10 @@
         }
 
         function setWfGain(rid, val) {
-            const num = Math.max(50, Math.min(220, parseInt(val, 10) || 105));
+            const num = Math.max(30, Math.min(250, parseInt(val, 10) || 110));
             if (wfState[rid]) wfState[rid].gain = num / 100;
+            const txt = document.getElementById(`wf-gain-val-${rid}`);
+            if (txt) txt.textContent = num;
             localStorage.setItem(`icom_wf_gain_v1_${rid}`, num);
         }
 
@@ -2053,7 +2063,11 @@
             if (btn3d) btn3d.classList.toggle('active', mode === '3d');
 
             const gSlider = document.getElementById(`wf-gain-${rid}`);
-            if (gSlider) gSlider.value = Math.round(wfState[rid].gain * 100);
+            const gVal = Math.round(wfState[rid].gain * 100);
+            if (gSlider) gSlider.value = gVal;
+            const gTxt = document.getElementById(`wf-gain-val-${rid}`);
+            if (gTxt) gTxt.textContent = gVal;
+
             const fSlider = document.getElementById(`wf-filter-${rid}`);
             if (fSlider) fSlider.value = wfState[rid].filter;
             const fTxt = document.getElementById(`wf-filter-val-${rid}`);
@@ -2068,13 +2082,17 @@
             const tmp = document.createElement('canvas');
             tmp.width = st.offscreen.width;
             tmp.height = st.offscreen.height;
-            tmp.getContext('2d').drawImage(st.offscreen, 0, 0);
+            const tmpCtx = tmp.getContext('2d', { alpha: false });
+            tmpCtx.imageSmoothingEnabled = false;
+            tmpCtx.drawImage(st.offscreen, 0, 0);
 
             st.offscreen.width = w;
             st.offscreen.height = h;
-            st.offCtx.fillStyle = '#05070e';
+            st.offCtx.imageSmoothingEnabled = false;
+            st.offCtx.fillStyle = '#03050a';
             st.offCtx.fillRect(0, 0, w, h);
             st.offCtx.drawImage(tmp, 0, 0, tmp.width, tmp.height, 0, 0, w, tmp.height);
+            st.offCtx.imageSmoothingEnabled = false;
             st.rowImg = st.offCtx.createImageData(w, 1);
         }
 
@@ -2107,91 +2125,102 @@
             if (edgeHigh !== undefined) st.edgeHigh = edgeHigh;
             const len = Math.min(WF_BINS, dataArr.length);
 
-            // 1. Dynamic receiver noise floor calculation:
-            // p20 represents true receiver noise floor even when 80m is heavily crowded with signals
+            // 1. Sort for robust noise floor estimation (20th percentile)
             for (let i = 0; i < len; i++) {
                 st.rawSortBuf[i] = dataArr[i];
             }
             st.rawSortBuf.subarray(0, len).sort();
             const p20 = st.rawSortBuf[Math.floor(len * 0.20)];
-            const p50 = st.rawSortBuf[Math.floor(len * 0.50)];
 
-            // Filter ratio: 0.0 (maximum sensitivity, raw waterfall) to 1.0 (heavy noise reduction)
             const filterVal = (st.filter !== undefined) ? st.filter : 25;
-            const fRatio = filterVal / 100.0;
+            // Noise gate offset above p20: at filter=0, 0 gate; at filter=25, +2.0 units; at filter=100, +8.0 units
+            const gateOffset = (filterVal / 100.0) * 8.0;
+            const effectiveFloor = p20 + gateOffset;
 
-            // Base threshold: at filter=0 sits directly at p20; at filter=100 sits 12 units above p20
-            const noiseFloor = p20 + fRatio * 12.0;
+            const gainVal = Math.max(0.3, st.gain || 1.10);
+            // Dynamic range span: at gain 1.1 -> dynSpan = 48 units. At gain 2.0 -> 26 units.
+            const dynSpan = Math.max(16.0, 52.0 / gainVal);
 
-            // 2. First pass: extract SNR above noiseFloor
-            const tempAbove = new Float32Array(WF_BINS);
-            const rawCoh = new Float32Array(WF_BINS);
-
+            // 2. Compute processed amplitudes for 2D Spectrum & 3D Waterfall
             for (let i = 0; i < len; i++) {
                 const raw = dataArr[i];
-                const aboveFloor = Math.max(0, raw - noiseFloor);
-                tempAbove[i] = aboveFloor;
+                const aboveFloor = Math.max(0, raw - effectiveFloor);
+                st.wfCoherent[i] = aboveFloor;
 
-                // Check if energy existed at this bin (or immediate neighbor) in previous sweep
-                const prevL = i > 0 ? st.prevAbove80[i - 1] : 0;
-                const prevC = st.prevAbove80[i];
-                const prevR = i + 1 < len ? st.prevAbove80[i + 1] : 0;
-                const prevMax = Math.max(prevC, prevL * 0.85, prevR * 0.85);
-
-                let cleanSig = 0;
-                if (filterVal === 0) {
-                    // Raw sensitivity mode: direct energy above noise floor
-                    cleanSig = aboveFloor;
-                } else if (prevMax >= 1.2) {
-                    // Coherent signal across sweeps: light gating
-                    cleanSig = Math.max(0, aboveFloor - fRatio * 1.0);
-                } else {
-                    // Single-sweep transient: moderate gating proportional to filter slider
-                    cleanSig = Math.max(0, aboveFloor - fRatio * 3.5);
-                }
-                rawCoh[i] = cleanSig;
-
-                // Spectrum display value: lively grass baseline + sharp unblurred peaks
+                // Base grass for 2D spectrum
                 const baseGrass = Math.max(0, raw - p20);
-                const specVal = Math.min(3.5, baseGrass * 0.16) + cleanSig * 1.25;
+                const specVal = Math.min(4.0, baseGrass * 0.22) + aboveFloor * 1.35;
                 st.targetSpec[i] = specVal;
+
                 if (!st.hasData) {
                     st.smoothSpec[i] = specVal;
-                    st.smooth3D[i] = cleanSig;
+                    st.smooth3D[i] = aboveFloor;
                 }
             }
 
-            // 3. Second pass on Waterfall signals: Peak/Valley contrast sharpener
-            for (let i = 0; i < len; i++) {
-                st.prevAbove80[i] = tempAbove[i];
-                const c = rawCoh[i];
-                if (c > 0) {
-                    const l = i > 0 ? rawCoh[i - 1] : 0;
-                    const r = i + 1 < len ? rawCoh[i + 1] : 0;
-                    // Only suppress isolated 1-bin weak speckles if filter is active
-                    if (filterVal > 15 && c < fRatio * 3.0 && l === 0 && r === 0 && st.wfDisplay[i] < 1.0) {
-                        st.wfCoherent[i] = 0;
+            // 3. Immediately render ONE true 1-pixel scanline directly into offscreen waterfall!
+            const canvas = document.getElementById(`wf-canvas-${rid}`);
+            if (canvas && canvas.width > 10 && canvas.height > 10) {
+                const w = canvas.width;
+                const dpr = Math.min(2, window.devicePixelRatio || 1);
+                const specH = Math.floor(canvas.height * 0.28);
+                const scaleH = Math.round(18 * dpr);
+                const wfTop = specH + scaleH;
+                const wfH = Math.max(64, canvas.height - wfTop);
+
+                ensureOffscreenSize(st, w, wfH);
+
+                const rowPixels = st.rowImg.data;
+                const binScale = (len - 1) / Math.max(1, w - 1);
+
+                for (let x = 0; x < w; x++) {
+                    const fIdx = x * binScale;
+                    const i1 = Math.min(len - 1, fIdx | 0);
+                    const i0 = Math.max(0, i1 - 1);
+                    const i2 = Math.min(len - 1, i1 + 1);
+                    const i3 = Math.min(len - 1, i1 + 2);
+                    const t = fIdx - i1;
+
+                    const y0 = dataArr[i0];
+                    const y1 = dataArr[i1];
+                    const y2 = dataArr[i2];
+                    const y3 = dataArr[i3];
+
+                    // Smooth Catmull-Rom spline interpolation (exact peaks, no step artifacts)
+                    const a = -0.5 * y0 + 1.5 * y1 - 1.5 * y2 + 0.5 * y3;
+                    const b = y0 - 2.5 * y1 + 2.0 * y2 - 0.5 * y3;
+                    const c = -0.5 * y0 + 0.5 * y2;
+                    const d = y1;
+                    let rawVal = ((a * t + b) * t + c) * t + d;
+                    if (rawVal < 0) rawVal = 0;
+
+                    let lutIdx;
+                    if (rawVal <= effectiveFloor) {
+                        // Subtle dark navy noise floor texture (index 0..14)
+                        const nFrac = Math.max(0, Math.min(1.0, rawVal / Math.max(1, effectiveFloor)));
+                        lutIdx = Math.floor(nFrac * 14);
                     } else {
-                        const avgLR = (l + r) * 0.5;
-                        let sharp = c + (c - avgLR) * 0.40;
-                        if (c < avgLR) {
-                            sharp = c * 0.75;
-                        }
-                        st.wfCoherent[i] = Math.max(0, sharp);
+                        // High-contrast signal emergence (index 16..255)
+                        const eff = rawVal - effectiveFloor;
+                        const norm = Math.min(1.0, eff / dynSpan);
+                        const shaped = Math.pow(norm, 0.80);
+                        lutIdx = Math.min(255, Math.floor(16 + shaped * 239));
                     }
-                } else {
-                    st.wfCoherent[i] = 0;
+
+                    const rgb = wfColorLUT[lutIdx];
+                    const p = x * 4;
+                    rowPixels[p] = rgb[0];
+                    rowPixels[p + 1] = rgb[1];
+                    rowPixels[p + 2] = rgb[2];
+                    rowPixels[p + 3] = 255;
                 }
-                if (!st.hasData) {
-                    st.wfDisplay[i] = st.wfCoherent[i];
-                }
+
+                // Shift down 1 pixel with nearest-neighbor precision (zero blur!)
+                st.offCtx.imageSmoothingEnabled = false;
+                st.offCtx.drawImage(st.offscreen, 0, 0, w, wfH - 1, 0, 1, w, wfH - 1);
+                st.offCtx.putImageData(st.rowImg, 0, 0);
             }
 
-            for (let i = len; i < WF_BINS; i++) {
-                st.prevAbove80[i] = 0;
-                st.targetSpec[i] = 0;
-                st.wfCoherent[i] = 0;
-            }
             st.hasData = true;
         }
 
@@ -2208,7 +2237,7 @@
                         inIsland = true;
                     }
                     const px = sliceLeft + i * binToX;
-                    const norm = Math.min(1.0, (v / 110.0) * gain);
+                    const norm = Math.min(1.0, (v / 85.0) * gain);
                     ctx.lineTo(px, baseY - norm * heightScale);
                 } else if (inIsland) {
                     ctx.lineTo(sliceLeft + i * binToX, baseY);
@@ -2265,22 +2294,13 @@
                     const gain = st.gain;
 
                     // Update per-bin display state:
-                    // Fast attack (0.68) when signal appears, clean decay (0.32) when signal ends
                     for (let i = 0; i < WF_BINS; i++) {
                         const tgtS = st.targetSpec[i];
                         const sAlpha = tgtS > st.smoothSpec[i] ? 0.55 : 0.35;
                         st.smoothSpec[i] += (tgtS - st.smoothSpec[i]) * sAlpha;
 
-                        const tgtW = st.wfCoherent[i];
-                        if (tgtW === 0) {
-                            st.wfDisplay[i] *= 0.45;
-                            if (st.wfDisplay[i] < 0.8) st.wfDisplay[i] = 0;
-                        } else {
-                            const wAlpha = tgtW > st.wfDisplay[i] ? 0.68 : 0.42;
-                            st.wfDisplay[i] += (tgtW - st.wfDisplay[i]) * wAlpha;
-                        }
-
                         // Smooth coherent signal envelope for 3D Waterfall (silky ridge profile, zero flutter)
+                        const tgtW = st.wfCoherent[i];
                         const s3Alpha = tgtW > st.smooth3D[i] ? 0.28 : 0.16;
                         st.smooth3D[i] += (tgtW - st.smooth3D[i]) * s3Alpha;
                         if (st.smooth3D[i] < 0.4) st.smooth3D[i] = 0;
@@ -2299,56 +2319,6 @@
                     }
                     const subShift = st.tick3D / WF3D_STEP_FRAMES;
                     st.tick3D = (st.tick3D + 1) % WF3D_STEP_FRAMES;
-
-                    // Render 1:1 native-width 2D waterfall scanline (w pixels wide, 1 pixel tall)
-                    const rowPixels = st.rowImg.data;
-                    const binScale = (WF_BINS - 1) / Math.max(1, w - 1);
-
-                    for (let x = 0; x < w; x++) {
-                        const fIdx = x * binScale;
-                        const i0 = fIdx | 0;
-                        const i1 = i0 < WF_BINS - 1 ? i0 + 1 : i0;
-                        const frac = fIdx - i0;
-
-                        const v0 = st.wfDisplay[i0];
-                        const v1 = st.wfDisplay[i1];
-
-                        // Sharp sub-bin interpolation: steep cosine transition + narrow peak profile
-                        const sFrac = frac * frac * (3 - 2 * frac);
-                        let sig = v0 + (v1 - v0) * sFrac;
-
-                        // If only one side is non-zero (edge of a signal or 1-bin peak), tighten the skirt
-                        if (v0 === 0 || v1 === 0) {
-                            sig *= (1.0 - 0.35 * (4.0 * frac * (1.0 - frac)));
-                        }
-
-                        const scaledSig = sig * gain;
-                        const filterVal = (st.filter !== undefined) ? st.filter : 25;
-                        const minFloorThresh = (filterVal === 0) ? 0.35 : Math.min(1.8, 0.4 + (filterVal / 100.0) * 1.4);
-                        let lutIdx;
-                        if (scaledSig <= minFloorThresh) {
-                            // 1x1 native hardware pixel dark SDR background floor (zero blue noise dots!)
-                            lutIdx = (2 + Math.random() * 5) | 0;
-                        } else {
-                            // Smooth soft-knee ramp above minFloorThresh so weak signals emerge cleanly
-                            const eff = scaledSig - minFloorThresh;
-                            const norm = Math.min(1.0, eff / 95.0);
-                            const shaped = Math.pow(norm, 0.72);
-                            const microTex = (Math.random() - 0.5) * 2.2;
-                            lutIdx = Math.min(255, Math.max(10, Math.round(10 + shaped * 245 + microTex)));
-                        }
-
-                        const rgb = wfColorLUT[lutIdx];
-                        const p = x * 4;
-                        rowPixels[p] = rgb[0];
-                        rowPixels[p + 1] = rgb[1];
-                        rowPixels[p + 2] = rgb[2];
-                        rowPixels[p + 3] = 255;
-                    }
-
-                    // Shift 2D waterfall down by 1 exact hardware pixel and insert top scanline
-                    st.offCtx.drawImage(st.offscreen, 0, 0, w, wfH - 1, 0, 1, w, wfH - 1);
-                    st.offCtx.putImageData(st.rowImg, 0, 0);
 
                     if (!is3D) {
                         // Draw crisp 475-bin 2D Spectrum (no horizontal spline mush, calm noise floor)
