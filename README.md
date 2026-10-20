@@ -39,6 +39,28 @@ Featuring real-time 2D/3D waterfall spectrum display, bidirectional low-latency 
   - Integrated rigctld TCP servers (default ports `4532` and `4533`).
   - Connect **WSJT-X**, **JTDX**, **FLDigi**, **Log4OM**, or **N1MM** directly over TCP without needing physical CI-V splitters or virtual COM-port pairs.
 
+- **Integrated 2m APRS Packet Radio & 1200 Baud Bell 202 Demodulator:**
+  - Real-time 1200 baud Bell 202 AFSK packet demodulation directly from radio USB audio (144.800 MHz standard or customizable).
+  - High-performance streaming matched-filter I/Q envelope detector with zero-crossing DPLL symbol clock recovery.
+  - Robust HDLC frame assembly, bit unstuffing, and CRC-16 CCITT verification.
+  - Real-time Heard Stations list with Call+SSID, time ago, Maidenhead Grid Locator, Distance & Bearing, Speed, Heading, and beacon comments.
+  - Quick "⚡ Tune 144.800 FM" button for 1-click frequency setup.
+
+- **Interactive OpenStreetMap (Leaflet) Mapping:**
+  - 100% free OpenStreetMap and CartoDB Dark Matter layers (Zero paid API keys required).
+  - Bundled local Leaflet library for reliable offline operation during field days and emergency communications.
+  - Stations plotted on map with SSID badges and APRS symbol icons (🚗 Mobile, 🏠 Base, 📡 Digipeater, 🌧️ WX, 🚶 Pedestrian, etc.).
+  - Rich interactive popups on marker click displaying full station metrics, coordinates, distance/bearing, telemetry, and raw path.
+  - Split View, Map Only, and List Only viewing modes with full-screen maximization.
+
+- **Autonomous APRS Digipeater (New-N Paradigm):**
+  - Dedicated **ON / OFF switch** to instantly switch between normal receiver and active digipeater mode.
+  - Full New-N paradigm path processor (`WIDE1-1`, `WIDE2-n`, direct call matching) with hop decrementing and loop prevention.
+  - 30-second duplicate suppression cache prevents ping-pong loops and redundant transmissions.
+  - Automated Bell 202 audio generation and CI-V PTT keying over USB with carrier-sense (CSMA) backoff.
+  - Optional periodic position beacon with Maidenhead locator and custom comment.
+  - Full local persistence in `icom_config.json`, `aprs_stations.json`, and browser `localStorage`.
+
 - **Frequency Bookmarks & Interactive Reordering:**
   - Save current operating frequencies with one click directly from the radio header or bookmarks drawer (`+ ⭐ Bookmark`).
   - **Drag-and-Drop Reordering:** Freely rearrange saved station memories with drag handle (`⠿`) or quick `▲` / `▼` step buttons.

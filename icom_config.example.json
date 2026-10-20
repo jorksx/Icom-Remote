@@ -40,5 +40,22 @@
       "rigctld_port": 4533,
       "vcom_port": ""
     }
+  },
+  "aprs": {
+    "rx_enabled": false,
+    "radio_id": "2",
+    "digi_enabled": false,
+    "my_call": "N0CALL-10",
+    "allow_wide1": true,
+    "allow_wide2": true,
+    "tx_delay_ms": 250,
+    "beacon_enabled": false,
+    "beacon_interval_min": 15,
+    "beacon_comment": "Icom Remote APRS Digipeater",
+    "my_symbol": "#",
+    "my_symbol_table": "/",
+    "my_lat": 60.1699,
+    "my_lon": 24.9384,
+    "my_grid": "KP20le"
   }
 }

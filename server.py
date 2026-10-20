@@ -24,11 +24,13 @@ try:
     import sounddevice as sd
     import numpy as np
     import webview
+    import aprslib
+    import aprs_modem
 except ImportError:
     logging.warning("Asennetaan tarvittavat kirjastot...")
     subprocess.check_call([
         sys.executable, "-m", "pip", "install",
-        "aiohttp", "pyserial", "pystray", "pillow", "sounddevice", "numpy", "pywebview"
+        "aiohttp", "pyserial", "pystray", "pillow", "sounddevice", "numpy", "pywebview", "aprslib"
     ])
     import aiohttp
     from aiohttp import web
@@ -39,6 +41,8 @@ except ImportError:
     import sounddevice as sd
     import numpy as np
     import webview
+    import aprslib
+    import aprs_modem
 
 logging.basicConfig(level=logging.INFO)
 
@@ -165,6 +169,23 @@ DEFAULT_CONFIG = {
             "wf_speed": 2,
             "wf_mode": "3d"
         }
+    },
+    "aprs": {
+        "rx_enabled": False,
+        "radio_id": "2",
+        "digi_enabled": False,
+        "my_call": "N0CALL-10",
+        "allow_wide1": True,
+        "allow_wide2": True,
+        "tx_delay_ms": 250,
+        "beacon_enabled": False,
+        "beacon_interval_min": 15,
+        "beacon_comment": "Icom Remote APRS Digipeater",
+        "my_symbol": "#",
+        "my_symbol_table": "/",
+        "my_lat": 60.1699,
+        "my_lon": 24.9384,
+        "my_grid": "KP20le"
     }
 }
 
@@ -190,6 +211,11 @@ def load_config():
             raw["web_pin_updated"] = DEFAULT_CONFIG["web_pin_updated"]
         if "bookmarks" not in raw or not isinstance(raw["bookmarks"], list):
             raw["bookmarks"] = list(DEFAULT_CONFIG["bookmarks"])
+        if "aprs" not in raw or not isinstance(raw["aprs"], dict):
+            raw["aprs"] = dict(DEFAULT_CONFIG["aprs"])
+        else:
+            for k, v in DEFAULT_CONFIG["aprs"].items():
+                raw["aprs"].setdefault(k, v)
         # Varmistetaan oletuskentät
         for rid in ("1", "2"):
             if rid not in raw["radios"]:
@@ -1089,6 +1115,13 @@ class RadioAudioChannel:
     def _ensure_rx_stream(self):
         """Varmistaa että radion USB RX -sisääntulovirta on auki kuuntelua ja/tai tallennusta varten."""
         if self.rx_dev is None:
+            saved_rx = global_config["radios"].get(self.radio_id, {}).get("audio_rx_dev", "")
+            if saved_rx:
+                try:
+                    self.rx_dev = int(saved_rx)
+                except Exception:
+                    pass
+        if self.rx_dev is None:
             return
         if self.rx_stream is not None and self.rx_stream_dev == self.rx_dev:
             try:
@@ -1108,6 +1141,13 @@ class RadioAudioChannel:
                 mono = ((indata[:, 0] + indata[:, 1]) * 0.65).astype(np.float32)
             else:
                 mono = indata[:, 0].copy()
+
+            # APRS demodulation
+            if 'aprs_engine' in globals() and aprs_engine and aprs_engine.rx_enabled and str(self.radio_id) == str(aprs_engine.radio_id):
+                try:
+                    aprs_engine.feed_audio(self.radio_id, mono)
+                except Exception:
+                    pass
 
             sql_open = self.is_squelch_open()
             gated_mono = mono if sql_open else np.zeros_like(mono)
@@ -1439,6 +1479,67 @@ class DualAudioManager:
 
 
 audio_manager = DualAudioManager()
+
+# APRS Engine setup
+aprs_engine = aprs_modem.AprsEngine(stations_file=os.path.join(BASE_DIR, "aprs_stations.json"))
+aprs_engine.configure(global_config.get("aprs", {}))
+
+def aprs_tx_audio_handler(radio_id: str, audio_samples: np.ndarray):
+    r = radios.get(str(radio_id))
+    if not r or not r.state.get('online', False):
+        logging.warning(f"APRS TX skipped: radio {radio_id} not online")
+        return
+    
+    # Carrier sense: if S-meter is active (> 25%), backoff up to 2.5 seconds
+    wait_start = time.monotonic()
+    while (time.monotonic() - wait_start) < 2.5:
+        if float(r.state.get('smeter_pct', 0)) < 25.0:
+            break
+        time.sleep(0.1)
+
+    rconf = global_config.get("radios", {}).get(str(radio_id), {})
+    tx_dev = rconf.get("audio_tx_dev")
+    if not tx_dev:
+        logging.warning(f"APRS TX skipped: no audio_tx_dev configured for radio {radio_id}")
+        return
+
+    try:
+        tx_dev_int = int(tx_dev)
+    except Exception:
+        logging.warning(f"APRS TX skipped: invalid audio_tx_dev '{tx_dev}'")
+        return
+
+    try:
+        r.set_ptt_sync(1)
+        time.sleep(0.04)
+        sd.play(audio_samples, samplerate=16000, device=tx_dev_int, blocking=True)
+        time.sleep(0.02)
+    except Exception as e:
+        logging.error(f"APRS TX error playing audio: {e}")
+    finally:
+        r.set_ptt_sync(0)
+
+def aprs_on_packet(pkt: dict):
+    if ws_clients and app_loop and not app_loop.is_closed():
+        msg = json.dumps({"type": "aprs_packet", "packet": pkt})
+        for ws in list(ws_clients):
+            if not ws.closed:
+                try:
+                    asyncio.run_coroutine_threadsafe(ws.send_str(msg), app_loop)
+                except Exception:
+                    pass
+
+def aprs_on_digipeat(info: dict):
+    if ws_clients and app_loop and not app_loop.is_closed():
+        msg = json.dumps({"type": "aprs_digipeated", "info": info})
+        for ws in list(ws_clients):
+            if not ws.closed:
+                try:
+                    asyncio.run_coroutine_threadsafe(ws.send_str(msg), app_loop)
+                except Exception:
+                    pass
+
+aprs_engine.set_callbacks(on_packet=aprs_on_packet, on_digipeat=aprs_on_digipeat, tx_audio=aprs_tx_audio_handler)
 
 
 class RigctldServer:
@@ -1809,6 +1910,10 @@ async def api_config_update(request):
     changed = False
     if "bookmarks" in data and isinstance(data["bookmarks"], list):
         global_config["bookmarks"] = data["bookmarks"]
+        changed = True
+    if "aprs" in data and isinstance(data["aprs"], dict):
+        global_config.setdefault("aprs", {}).update(data["aprs"])
+        aprs_engine.configure(global_config["aprs"])
         changed = True
     if rid in global_config["radios"]:
         for key in ("port", "baud", "vfo_offset", "ptt_key_code", "ptt_key_name", "ptt_global",
@@ -2358,6 +2463,85 @@ async def api_web_pin(request):
     })
 
 
+async def api_aprs_status(request):
+    return web.json_response(aprs_engine.get_status())
+
+
+async def api_aprs_stations(request):
+    with aprs_engine.lock:
+        return web.json_response({
+            "stations": list(aprs_engine.heard_stations.values()),
+            "recent_packets": aprs_engine.recent_packets[-100:]
+        })
+
+
+async def api_aprs_config(request):
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({"status": "error", "message": "Invalid JSON"}, status=400)
+    
+    aprs_engine.configure(data)
+    
+    aprs_cfg = global_config.setdefault("aprs", {})
+    for k in ["rx_enabled", "radio_id", "digi_enabled", "my_call", "allow_wide1", "allow_wide2",
+              "tx_delay_ms", "beacon_enabled", "beacon_interval_min", "beacon_comment",
+              "my_symbol", "my_symbol_table", "my_lat", "my_lon", "my_grid"]:
+        if k in data:
+            aprs_cfg[k] = data[k]
+    save_config(global_config)
+    
+    if aprs_engine.rx_enabled and aprs_engine.radio_id in audio_manager.channels:
+        audio_manager.channels[aprs_engine.radio_id]._ensure_rx_stream()
+
+    if ws_clients and app_loop and not app_loop.is_closed():
+        msg = json.dumps({"type": "aprs_status", "status": aprs_engine.get_status()})
+        for ws in list(ws_clients):
+            if not ws.closed:
+                try:
+                    asyncio.run_coroutine_threadsafe(ws.send_str(msg), app_loop)
+                except Exception:
+                    pass
+
+    return web.json_response({"status": "ok", "config": aprs_engine.get_status()})
+
+
+async def api_aprs_clear(request):
+    aprs_engine.clear_stations()
+    return web.json_response({"status": "ok", "message": "Heard stations cleared"})
+
+
+async def api_aprs_send_beacon(request):
+    if not aprs_engine.my_call or aprs_engine.my_call == "N0CALL-10":
+        return web.json_response({"status": "error", "message": "Please configure your Callsign first in APRS settings."}, status=400)
+    success = aprs_engine.send_beacon()
+    return web.json_response({"status": "ok" if success else "error"})
+
+
+async def api_aprs_tune(request):
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    rid = str(data.get("radio_id", aprs_engine.radio_id or "2"))
+    r = radios.get(rid)
+    if not r or not r.ser or not r.ser.is_open:
+        return web.json_response({"status": "error", "message": f"Radio {rid} is not connected."}, status=400)
+    
+    freq_hz = int(data.get("freq_hz", 144800000))
+    r.set_frequency_sync(freq_hz)
+    addr = r.radio_addr
+    r.ser.write(civ_command(0x05, None, hz_to_bcd(freq_hz), addr))
+    await asyncio.sleep(0.04)
+    r.set_mode_sync("FM", 1)
+    r.ser.write(civ_command(0x06, 0x05, bytes([0x01]), addr))
+    await asyncio.sleep(0.02)
+    # Ensure data mode off
+    r.ser.write(civ_command(0x1A, 0x06, bytes([0x00, 0x01]), addr))
+    await broadcast_state(rid)
+    return web.json_response({"status": "ok", "message": f"Tuned radio {rid} to {freq_hz/1e6:.3f} MHz FM"})
+
+
 def create_app():
     app = web.Application()
     app.add_routes([
@@ -2383,9 +2567,18 @@ def create_app():
         web.post('/api/wsjtx_config', api_wsjtx_config),
         web.post('/api/wsjtx_revert', api_wsjtx_revert),
         web.get('/api/wsjtx_status', api_wsjtx_status),
+        web.get('/api/aprs/status', api_aprs_status),
+        web.get('/api/aprs/stations', api_aprs_stations),
+        web.post('/api/aprs/config', api_aprs_config),
+        web.post('/api/aprs/clear', api_aprs_clear),
+        web.post('/api/aprs/send_beacon', api_aprs_send_beacon),
+        web.post('/api/aprs/tune', api_aprs_tune),
         web.get('/ws', websocket_handler),
         web.get('/ws_audio', websocket_audio_handler)
     ])
+    static_dir = os.path.join(BASE_DIR, 'static')
+    if os.path.exists(static_dir):
+        app.router.add_static('/static', path=static_dir)
     return app
 
 

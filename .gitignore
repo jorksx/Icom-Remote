@@ -11,6 +11,7 @@ dist/
 
 # Local radio configuration
 icom_config.json
+aprs_stations.json
 webview_data/
 
 # Local recordings & temporary files
