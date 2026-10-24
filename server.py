@@ -669,8 +669,10 @@ class RadioController:
         self.initial_synced = True
         try:
             if getattr(self, 'brand', 'auto') == 'yaesu':
-                # EX11051; varmistaa 11-05 SSB MIC SELECT = REAR (1) ja EX1107; lukee 11-07 SSB BFO -tilan
-                self.write_raw(b"AI0;TX0;EX11051;ID;FA;MD0;EX1107;SM0;PC;")
+                # EX11051; varmistaa 11-05 SSB MIC SELECT = REAR (1) ja EX1107; lukee 11-07 SSB BFO -tilan.
+                # ML1000;ML0000; asettaa Monitor Level = 0 ja Monitor OFF (vaimentaa FT-891:n tunnetun CAT-naputuksen kaiuttimesta!).
+                # AI1; ottaa käyttöön Auto Information -tilan (taajuus ja mode päivittyvät automaattisesti nupista).
+                self.write_raw(b"AI1;TX0;EX11051;ID;FA;MD0;EX1107;SM0;PC;ML1000;ML0000;")
                 await asyncio.sleep(0.05)
                 await broadcast_state(self.radio_id)
                 return
@@ -750,7 +752,7 @@ class RadioController:
             # Kysytään aloituskyselyt ilman ylimääräisiä päällekkäisiä kyselyitä
             await asyncio.sleep(0.05)
             if getattr(self, 'brand', 'auto') == 'yaesu':
-                self.write_raw(b"AI0;TX0;ID;FA;MD0;")
+                self.write_raw(b"AI1;TX0;ID;FA;MD0;ML1000;ML0000;")
                 await asyncio.sleep(0.06)
 
             if not self.state['online']:
@@ -1017,7 +1019,7 @@ class RadioController:
                 global_config["radios"].setdefault(self.radio_id, {})["name"] = model_name
                 global_config["radios"][self.radio_id]["brand"] = "yaesu"
                 save_config(global_config)
-                self.write_raw(b"AI0;")
+                self.write_raw(b"AI1;ML1000;ML0000;")
                 if was_offline:
                     asyncio.create_task(self._sync_initial_state())
 
@@ -1120,9 +1122,11 @@ class RadioController:
             is_tx = (body in ('1', '2'))
             # Estetään SignaLinkin VOX-viiveen (DLY hang-time) aiheuttama PTT:n uudelleenlukittuminen
             # heti sen jälkeen kun käyttäjä on vapauttanut PTT-napin:
-            if is_tx and not getattr(self, 'user_ptt', False) and time.monotonic() < getattr(self, 'ptt_release_until', 0.0):
+            if is_tx and not getattr(self, 'user_ptt', False) and not getattr(self, 'cat_ptt', False) and time.monotonic() < getattr(self, 'ptt_release_until', 0.0):
                 return
             tila = 1 if is_tx else 0
+            if tila == 0 and (getattr(self, 'cat_ptt', False) or getattr(self, 'user_ptt', False)):
+                return
             if self.state.get('ptt') != tila:
                 self.state['ptt'] = tila
                 state_changed = True
@@ -1300,6 +1304,10 @@ class RadioController:
         # PTT tilan luku / kuittaus (1C 00)
         elif cmd == 0x1C and len(msg) >= 8 and msg[5] == 0x00:
             ptt_val = 1 if msg[6] == 0x01 else 0
+            if ptt_val == 0 and (getattr(self, 'cat_ptt', False) or getattr(self, 'user_ptt', False)):
+                return
+            if ptt_val == 1 and not getattr(self, 'cat_ptt', False) and not getattr(self, 'user_ptt', False) and (time.monotonic() - getattr(self, 'last_ptt_off_time', 0.0) < 0.8):
+                return
             if self.state['ptt'] != ptt_val:
                 self.state['ptt'] = ptt_val
                 state_changed = True
@@ -1468,21 +1476,22 @@ class RadioController:
                                 else:
                                     self.write_civ(civ_command(0x1C, 0x00, None, self.radio_addr))
                             tick += 1
-                            await asyncio.sleep(0.08)
+                            poll_sleep = 0.25 if getattr(self, 'brand', 'icom') == 'yaesu' else 0.08
+                            await asyncio.sleep(poll_sleep)
                             continue
 
                         if getattr(self, 'brand', 'icom') == 'yaesu':
-                            step = tick % 10
-                            if step == 0:
-                                self.write_raw(b"FA;")
-                            elif step == 2:
-                                self.write_raw(b"MD0;EX1107;")
-                            elif step in (4, 8):
+                            # Yaesu FT-891: Rauhallinen tahti CAT-väylälle kaiutin-naputuksen estämiseksi.
+                            # AI1; huolehtii taajuuden (FA) ja moden (MD) automaattisesta päivityksestä nupista käännettäessä.
+                            step = tick % 6
+                            if step in (0, 2, 4):
                                 self.write_raw(b"SM0;")
-                            elif step == 6:
+                            elif step == 1:
                                 self.write_raw(b"TX;")
-                            elif step == 9:
-                                self.write_raw(b"PC;")
+                            elif step == 3:
+                                self.write_raw(b"FA;")
+                            elif step == 5:
+                                self.write_raw(b"MD0;")
                         else:
                             # Icom polling
                             if now - self.last_scope_time > 2.0:
@@ -1525,13 +1534,17 @@ class RadioController:
                 break
             except Exception as e:
                 logging.debug(f"Radio {self.radio_id} poll error: {e}")
-            await asyncio.sleep(0.075)
+            poll_sleep = 0.25 if getattr(self, 'brand', 'icom') == 'yaesu' else 0.075
+            await asyncio.sleep(poll_sleep)
 
     async def set_ptt(self, ptt_on: bool, is_cat: bool = False):
         tila = 1 if ptt_on else 0
         self.user_ptt = (tila == 1) and (not is_cat)
         self.cat_ptt = is_cat and (tila == 1)
-        if tila == 0:
+        if tila == 1:
+            self.last_ptt_on_time = time.monotonic()
+        else:
+            self.last_ptt_off_time = time.monotonic()
             self.ptt_release_until = time.monotonic() + 0.8
         self.state['ptt'] = tila
 
@@ -1543,6 +1556,9 @@ class RadioController:
                     self.write_raw(b"TX1;" if tila else b"TX0;")
                 else:
                     self.write_civ(civ_command(0x1C, 0x00, bytes([tila]), self.radio_addr))
+                    if tila == 1:
+                        await asyncio.sleep(0.015)
+                        self.write_civ(civ_command(0x1C, 0x00, bytes([tila]), self.radio_addr))
             except Exception:
                 pass
 
@@ -1562,7 +1578,10 @@ class RadioController:
         tila = 1 if ptt_val else 0
         self.user_ptt = (tila == 1) and (not is_cat)
         self.cat_ptt = is_cat and (tila == 1)
-        if tila == 0:
+        if tila == 1:
+            self.last_ptt_on_time = time.monotonic()
+        else:
+            self.last_ptt_off_time = time.monotonic()
             self.ptt_release_until = time.monotonic() + 0.8
         self.state['ptt'] = tila
 
@@ -1570,14 +1589,18 @@ class RadioController:
             with self.ser_lock:
                 try:
                     if getattr(self, 'brand', 'icom') == 'yaesu':
-                        self.ser.write(b"TX1;\r\n" if tila else b"TX0;\r\n")
+                        cmd = b"TX1;" if tila else b"TX0;"
+                        self.ser.write(cmd)
+                        if tila == 1:
+                            time.sleep(0.015)
+                            self.ser.write(cmd)
                     else:
-                        self.ser.write(civ_command(0x1C, 0x00, bytes([tila]), self.radio_addr))
-                        if tila == 0:
-                            time.sleep(0.010)
-                            self.ser.write(civ_command(0x1C, 0x00, bytes([0x00]), self.radio_addr))
-                except Exception:
-                    pass
+                        cmd = civ_command(0x1C, 0x00, bytes([tila]), self.radio_addr)
+                        self.ser.write(cmd)
+                        time.sleep(0.020)
+                        self.ser.write(cmd)
+                except Exception as e:
+                    logging.error(f"set_ptt_sync error on radio {self.radio_id}: {e}")
 
         if tila == 0:
             if self.radio_id in audio_manager.channels:
@@ -1596,20 +1619,22 @@ class RadioController:
         else:
             self.state['main_hz'] = hz
         if self.ser and self.ser.is_open and self.state.get('online'):
-            try:
-                if getattr(self, 'brand', 'icom') == 'yaesu':
-                    self.ser.write(f"FA{hz:09d};\r\n".encode('ascii'))
-                else:
-                    self.ser.write(civ_command(0x05, None, hz_to_bcd(hz), to_addr=self.radio_addr))
-            except Exception:
-                pass
+            with self.ser_lock:
+                try:
+                    if getattr(self, 'brand', 'icom') == 'yaesu':
+                        self.ser.write(f"FA{hz:09d};".encode('ascii'))
+                    else:
+                        self.ser.write(civ_command(0x05, None, hz_to_bcd(hz), to_addr=self.radio_addr))
+                        time.sleep(0.025)
+                except Exception as e:
+                    logging.error(f"set_frequency_sync error on radio {self.radio_id}: {e}")
         if app_loop and not app_loop.is_closed():
             asyncio.run_coroutine_threadsafe(broadcast_state(self.radio_id), app_loop)
 
     def set_mode_sync(self, mode_str: str, filter_val: int = 1):
         self.state['mode'] = mode_str
         self.state['filter'] = filter_val
-        self.state['data_on'] = ('-D' in mode_str)
+        self.state['data_on'] = ('-D' in mode_str or 'PKT' in mode_str or 'DATA' in mode_str)
         if self.current_band == 1:
             self.state['sub_mode'] = mode_str
             self.state['sub_filter'] = filter_val
@@ -1617,29 +1642,33 @@ class RadioController:
             self.state['main_mode'] = mode_str
             self.state['main_filter'] = filter_val
         if self.ser and self.ser.is_open and self.state.get('online'):
-            try:
-                if getattr(self, 'brand', 'icom') == 'yaesu':
-                    if mode_str == "LSB":
-                        self.yaesu_ssb_bfo = '1'
-                    elif mode_str == "USB":
-                        self.yaesu_ssb_bfo = '0'
-                    y_map = {
-                        "LSB": "EX11071;MD01;EX11071;", "USB": "EX11070;MD02;EX11070;",
-                        "CW": "MD03;", "FM": "MD04;", "AM": "MD05;", "RTTY": "MD09;",
-                        "DATA-USB": "MD0C;", "USB-D": "MD0C;", "DATA-LSB": "MD08;", "LSB-D": "MD08;",
-                        "DATA-FM": "MD0A;", "FM-D": "MD0A;"
-                    }
-                    self.ser.write(f"{y_map.get(mode_str, 'EX11070;MD02;EX11070;')}\r\n".encode('ascii'))
-                else:
-                    m_base = mode_str.split('-')[0].upper()
-                    mode_map = {'LSB': 0x00, 'USB': 0x01, 'AM': 0x02, 'CW': 0x03, 'RTTY': 0x04, 'FM': 0x05, 'WFM': 0x06, 'CW-R': 0x07, 'RTTY-R': 0x08, 'DV': 0x17}
-                    code = mode_map.get(m_base, 0x01)
-                    self.ser.write(civ_command(0x06, None, bytes([code, filter_val]), to_addr=self.radio_addr))
-                    if '-D' in mode_str:
-                        time.sleep(0.02)
-                        self.ser.write(civ_command(0x1A, 0x06, bytes([0x01, filter_val]), to_addr=self.radio_addr))
-            except Exception:
-                pass
+            with self.ser_lock:
+                try:
+                    if getattr(self, 'brand', 'icom') == 'yaesu':
+                        if mode_str == "LSB":
+                            self.yaesu_ssb_bfo = '1'
+                        elif mode_str == "USB":
+                            self.yaesu_ssb_bfo = '0'
+                        y_map = {
+                            "LSB": "EX11071;MD01;EX11071;", "USB": "EX11070;MD02;EX11070;",
+                            "CW": "MD03;", "FM": "MD04;", "AM": "MD05;", "RTTY": "MD09;",
+                            "DATA-USB": "MD0C;", "USB-D": "MD0C;", "PKTUSB": "MD0C;", "DATA": "MD0C;", "D-U": "MD0C;",
+                            "DATA-LSB": "MD08;", "LSB-D": "MD08;", "PKTLSB": "MD08;", "D-L": "MD08;",
+                            "DATA-FM": "MD0A;", "FM-D": "MD0A;", "PKTFM": "MD0A;", "D-F": "MD0A;"
+                        }
+                        cmd = y_map.get(mode_str, 'EX11070;MD02;EX11070;')
+                        self.ser.write(cmd.encode('ascii'))
+                    else:
+                        m_base = mode_str.split('-')[0].upper().replace("PKT", "")
+                        mode_map = {'LSB': 0x00, 'USB': 0x01, 'AM': 0x02, 'CW': 0x03, 'RTTY': 0x04, 'FM': 0x05, 'WFM': 0x06, 'CW-R': 0x07, 'RTTY-R': 0x08, 'DV': 0x17}
+                        code = mode_map.get(m_base, 0x01)
+                        is_data = 1 if ('-D' in mode_str or 'PKT' in mode_str or 'DATA' in mode_str) else 0
+                        self.ser.write(civ_command(0x06, None, bytes([code, filter_val]), to_addr=self.radio_addr))
+                        if m_base in ("LSB", "USB", "FM"):
+                            time.sleep(0.02)
+                            self.ser.write(civ_command(0x1A, 0x06, bytes([is_data, filter_val]), to_addr=self.radio_addr))
+                except Exception as e:
+                    logging.error(f"set_mode_sync error on radio {self.radio_id}: {e}")
         if app_loop and not app_loop.is_closed():
             asyncio.run_coroutine_threadsafe(broadcast_state(self.radio_id), app_loop)
 
@@ -2499,16 +2528,16 @@ class RigctldServer:
     """Kevyt ja luotettava Hamlib rigctld -yhteensopiva TCP-palvelin WSJT-X, JTDX ja muiden digiohjelmien CAT-ohjaukseen."""
     DUMP_STATE_PAYLOAD = (
         "1\n1\n0\n"
-        "150000.000000 1500000000.000000 0x1ff -1 -1 0x17e00007 0x1f\n"
+        "150000.000000 1500000000.000000 0x1dff -1 -1 0x17e00007 0x1f\n"
         "0 0 0 0 0 0 0\n"
-        "150000.000000 1500000000.000000 0x1ff 5000 100000 0x17e00007 0x1f\n"
+        "150000.000000 1500000000.000000 0x1dff 5000 100000 0x17e00007 0x1f\n"
         "0 0 0 0 0 0 0\n"
-        "0x1ff 1\n0x1ff 0\n0 0\n"
-        "0xc 2400\n0xc 1800\n0xc 3000\n0xc 0\n"
+        "0x1dff 1\n0x1dff 0\n0 0\n"
+        "0xc0c 2400\n0xc0c 1800\n0xc0c 3000\n0xc0c 0\n"
         "0x2 500\n0x2 2400\n0x2 50\n0x2 0\n"
         "0x10 300\n0x10 2400\n0x10 50\n0x10 0\n"
         "0x1 8000\n0x1 2400\n0x1 10000\n"
-        "0x20 15000\n0x20 8000\n0x40 230000\n"
+        "0x1020 15000\n0x1020 8000\n0x40 230000\n"
         "0 0\n9990\n9990\n10000\n0\n10 \n10 20 30 \n"
         "0xffffffffffffffff\n0xffffffffffffffff\n0xfffffffff7ffffff\n"
         "0xfffeff7083ffffff\n0xffffffffffffffff\n0xffffffffffffffbf\n"
@@ -2565,6 +2594,7 @@ class RigctldServer:
         conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         buf = ""
         radio = radios.get(self.radio_id)
+        client_keyed = False
         try:
             while self.running:
                 data = conn.recv(1024)
@@ -2600,11 +2630,24 @@ class RigctldServer:
                                 pass
                         conn.sendall(b"RPRT 0\n")
                     elif c in ("m", "\\get_mode", "get_mode"):
-                        cur_mode = radio.state.get("mode", "USB") if radio else "USB"
-                        is_data = radio.state.get("data_on", False) or ("-D" in cur_mode) if radio else False
-                        base = cur_mode.split("-")[0].upper()
-                        if is_data:
-                            resp = f"PKT{base}\n3000\n" if base in ("USB", "LSB", "FM") else f"{base}\n3000\n"
+                        cur_mode = (radio.state.get("mode", "USB") if radio else "USB").upper()
+                        is_data = (radio.state.get("data_on", False) or "-D" in cur_mode or "DATA" in cur_mode or "PKT" in cur_mode) if radio else False
+                        if "USB" in cur_mode:
+                            base = "USB"
+                        elif "LSB" in cur_mode:
+                            base = "LSB"
+                        elif "FM" in cur_mode:
+                            base = "FM"
+                        elif "CW" in cur_mode:
+                            base = "CW"
+                        elif "RTTY" in cur_mode:
+                            base = "RTTY"
+                        elif "AM" in cur_mode:
+                            base = "AM"
+                        else:
+                            base = cur_mode.split("-")[0]
+                        if is_data and base in ("USB", "LSB", "FM"):
+                            resp = f"PKT{base}\n3000\n"
                         elif base in ("USB", "LSB"):
                             resp = f"{base}\n3000\n"
                         elif base == "CW":
@@ -2623,10 +2666,17 @@ class RigctldServer:
                             m_arg = parts[1].upper()
                             if "PKT" in m_arg:
                                 target_mode = m_arg.replace("PKT", "") + "-D"
+                            elif m_arg in ("DATA", "DATA-USB", "DATA_USB", "D-U", "DIGI", "DIG"):
+                                target_mode = "USB-D"
+                            elif m_arg in ("DATA-LSB", "DATA_LSB", "D-L"):
+                                target_mode = "LSB-D"
+                            elif m_arg in ("DATA-FM", "DATA_FM", "D-F"):
+                                target_mode = "FM-D"
                             else:
                                 target_mode = m_arg
                             try:
                                 radio.set_mode_sync(target_mode)
+                                logging.info(f"[Rigctld-{self.radio_id}] CAT Mode -> {target_mode} (from {m_arg})")
                             except Exception:
                                 pass
                         conn.sendall(b"RPRT 0\n")
@@ -2637,7 +2687,9 @@ class RigctldServer:
                         if len(parts) > 1 and radio:
                             try:
                                 ptt_val = int(parts[1])
+                                client_keyed = (ptt_val == 1)
                                 radio.set_ptt_sync(ptt_val, is_cat=True)
+                                logging.info(f"[Rigctld-{self.radio_id}] CAT PTT -> {ptt_val}")
                             except Exception:
                                 pass
                         conn.sendall(b"RPRT 0\n")
@@ -2653,10 +2705,26 @@ class RigctldServer:
                         cur_freq = int(radio.state.get("taajuus_hz", 14074000)) if radio else 14074000
                         conn.sendall(f"{cur_freq}\n".encode("latin1"))
                     elif c in ("I", "\\set_split_freq", "set_split_freq"):
+                        if len(parts) > 1 and radio:
+                            try:
+                                hz = int(float(parts[1]))
+                                radio.set_frequency_sync(hz)
+                            except Exception:
+                                pass
                         conn.sendall(b"RPRT 0\n")
                     elif c in ("x", "\\get_split_mode", "get_split_mode"):
                         conn.sendall(b"PKTUSB\n3000\n")
                     elif c in ("X", "\\set_split_mode", "set_split_mode"):
+                        if len(parts) > 1 and radio:
+                            m_arg = parts[1].upper()
+                            if "PKT" in m_arg:
+                                target_mode = m_arg.replace("PKT", "") + "-D"
+                            else:
+                                target_mode = m_arg
+                            try:
+                                radio.set_mode_sync(target_mode)
+                            except Exception:
+                                pass
                         conn.sendall(b"RPRT 0\n")
                     elif c in ("l", "\\get_level", "get_level"):
                         conn.sendall(b"0\n")
@@ -2670,6 +2738,12 @@ class RigctldServer:
         except Exception:
             pass
         finally:
+            if client_keyed and radio and radio.cat_ptt:
+                try:
+                    radio.set_ptt_sync(0, is_cat=True)
+                    logging.info(f"[Rigctld-{self.radio_id}] Released CAT PTT on client disconnect")
+                except Exception:
+                    pass
             try:
                 conn.close()
             except Exception:

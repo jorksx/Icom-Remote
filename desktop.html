@@ -5743,13 +5743,10 @@
                     if (radioFavs.length > 0) {
                         html += radioFavs.map(bm => {
                             const mhz = (bm.hz / 1000000).toFixed(3);
-                            const rptrTxt = formatBookmarkRepeaterBadge(bm);
-                            const rptrSpan = rptrTxt ? `<span class="qbm-rptr">${escapeHtml(rptrTxt)}</span>` : '';
-                            return `<button type="button" class="quick-bm-chip" data-bmid="${bm.id}" data-bmhz="${bm.hz}" onclick="tuneRadioQuickBookmark('${rid}', '${bm.id}', this)" title="Tune ${slotModel} to ${escapeHtml(bm.name)} (${mhz} MHz ${bm.mode || ''}${rptrTxt ? ' | ' + rptrTxt : ''})">
+                            return `<button type="button" class="quick-bm-chip" data-bmid="${bm.id}" data-bmhz="${bm.hz}" onclick="tuneRadioQuickBookmark('${rid}', '${bm.id}', this)" title="Tune ${slotModel} to ${escapeHtml(bm.name)} (${mhz} MHz ${bm.mode || ''})">
                                 <span class="qbm-name">${escapeHtml(bm.name)}</span>
                                 <span class="qbm-freq">${mhz}</span>
                                 <span class="qbm-mode">${bm.mode || 'USB'}</span>
-                                ${rptrSpan}
                             </button>`;
                         }).join('');
                     }

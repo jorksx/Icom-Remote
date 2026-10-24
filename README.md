@@ -10,10 +10,28 @@ Featuring real-time 2D/3D waterfall spectrum display with interactive bookmark m
 
 ## 🆕 What's New (Latest Release)
 
+- **🌐 Full WSJT-X / WSJT-Z Integration with Multi-Instance Hamlib `rigctld`:**
+  - **Yaesu FT-891 D-U (DATA-USB) Automation:** `dump_state` now advertises full packet data capability (`0x1dff` with `PKTUSB`, `PKTLSB`, `PKTFM` and `0xc0c` filter bitmasks). When WSJT-X is in Data/Pkt mode (`M PKTUSB -1`), the server automatically switches the FT-891 directly to `MD0C;` (D-U mode) without manual UI intervention.
+  - **Icom IC-9700 CAT PTT & "Fake It" Split Stabilization:** Fixed race condition where rapid back-to-back `F <freq>` (500 Hz shift) followed by `T 1` (PTT ON) caused the IC-9700 to drop PTT or step frequency backwards repeatedly. Added 25 ms settling delay, double CI-V PTT frame under serial lock, and strict CAT PTT ownership guard preventing stale RX poll responses (`1C 00 00`) from dropping TX.
+  - **Multi-Instance Desktop Setup:** Full support for running 3 simultaneous WSJT-Z instances:
+    - `WSJT-Z (ICOM 7300)`: Hamlib port `4532`, UDP `2237`
+    - `WSJT-Z (ICOM 9700)`: Hamlib port `4533`, UDP `2238`
+    - `WSJT-Z (Yaesu FT-891)`: Hamlib port `4532`, UDP `2239`
+  - **Client Disconnect Fail-Safe:** Automatically unkeys rig PTT if a digital client crashes or abruptly closes its TCP connection.
+
+- **🔇 Yaesu FT-891 CAT Polling Noise & Speaker Ticking Elimination:**
+  - **Automatic Monitor Mute (`ML1000;ML0000;`):** Silences the notorious FT-891 hardware quirk where UART serial traces induce clicking into the internal monitor bus and external speaker. Sets Monitor Level to 0 (`ML1000;`) and Monitor OFF (`ML0000;`) on connection.
+  - **Auto-Information Protocol (`AI1;`):** Enables unsolicited real-time dial and mode broadcasts from the FT-891, eliminating the need for continuous polling.
+  - **Gentle Polling Cycle (75 ms -> 250 ms):** Reduced Yaesu CAT bus traffic by over 80%, polling only essential S-meter and PTT status at a relaxed 250 ms interval without audio chatter.
+
+- **🎯 Streamlined Quick Bookmarks Bar:**
+  - Stripped verbose repeater badges (`DUP- 0.6M`, `1750Hz`, `CTCSS`) from the Quick bookmarks chips below the VFO display for a clean, distraction-free view showing only station Name, Frequency, and Modulation Mode.
+
 - **⚡ Ultra-Low Latency Contest PTT & RX Audio Recovery (16 ms):**
   - Zero-delay hardware PTT unkey (`TX0;` / `1C 00 00`) sent at `0 ms` before audio stream teardown.
   - Upgraded audio engine to `256`-sample (`16 ms`, `latency='low'`) blocks with asynchronous `abort()` TX teardown and instant speaker queue flush so you never miss the first syllable of an answering station in SSB contests.
   - Direct WebSocket PTT signaling and `5 ms` kernel-level keyboard & mouse side-button (`Mouse4` / `Mouse5` / `MouseMid`) PTT polling.
+
 - **📍 Interactive Waterfall Bookmark Markers (IC-7300 & IC-9700):**
   - Saved bookmarks within the active waterfall span automatically appear on the 2D/3D hardware waterfall with a vertical dashed marker line, pointer triangle (`▼`), and station/repeater name badge (e.g., `Pori`).
   - **Click-on-Marker Tuning:** Click any bookmark badge directly on the waterfall to jump to that frequency and automatically load its mode and repeater settings.
