@@ -44,10 +44,88 @@ except ImportError:
     import aprslib
     import aprs_modem
 
-logging.basicConfig(level=logging.INFO)
-
 BASE_DIR = os.path.dirname(os.path.abspath(sys.executable if getattr(sys, 'frozen', False) else __file__))
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler(os.path.join(BASE_DIR, 'server.log'), encoding='utf-8')
+    ]
+)
 CONFIG_FILE = os.path.join(BASE_DIR, 'icom_config.json')
+
+ICOM_MODELS = {
+    0x94: "IC-7300",
+    0xA2: "IC-9700",
+    0x98: "IC-7610",
+    0x8E: "IC-7851",
+    0x80: "IC-7850",
+    0x6A: "IC-7800",
+    0x74: "IC-7700",
+    0x7A: "IC-7410",
+    0x60: "IC-9100",
+    0x76: "IC-7200",
+    0x70: "IC-7000",
+    0x88: "IC-7100",
+    0xA4: "IC-705",
+    0x66: "IC-746PRO",
+    0x56: "IC-756PRO",
+    0x5C: "IC-756PROII",
+    0x6E: "IC-756PROIII",
+    0x50: "IC-756",
+    0x40: "IC-775",
+    0x3C: "IC-781",
+    0x46: "IC-706MKIIG",
+    0x58: "IC-706MKII",
+    0x4E: "IC-706",
+    0x48: "IC-703",
+    0x2C: "IC-751A",
+    0x26: "IC-735",
+    0x04: "IC-725",
+    0x28: "IC-726",
+    0x38: "IC-728",
+    0x30: "IC-737",
+    0x44: "IC-738",
+    0x1E: "IC-765",
+    0x20: "IC-761",
+    0x8A: "IC-2730",
+    0x86: "ID-5100",
+    0x90: "ID-4100",
+    0xA0: "ID-52",
+    0x9A: "ID-51",
+    0x82: "ID-31",
+    0x6C: "ID-1",
+    0x32: "IC-970",
+    0x2E: "IC-275",
+    0x34: "IC-375",
+    0x36: "IC-475",
+    0x3E: "IC-575",
+    0x96: "IC-R8600",
+    0x64: "IC-R8500",
+}
+
+YAESU_MODELS = {
+    "0650": "FT-891",
+    "0570": "FT-991",
+    "0670": "FT-991A",
+    "0710": "FTDX10",
+    "0680": "FTDX101D",
+    "0681": "FTDX101MP",
+    "0730": "FT-710",
+    "0580": "FTDX3000",
+    "0460": "FTDX1200",
+    "0450": "FT-450",
+    "0520": "FT-2000",
+    "0380": "FT-950",
+    "0240": "FT-857",
+    "0250": "FT-897",
+    "0280": "FT-817",
+    "0620": "FT-818"
+}
+
+
 APP_PORT = 8085          # HTTPS Web / Mobile portti
 LOCAL_HTTP_PORT = 8086   # Paikallinen HTTP-portti työpöytäikkunalle
 WINDOW_TITLE = "Icom 7300 & 9700 Remote"
@@ -168,8 +246,35 @@ DEFAULT_CONFIG = {
             "wf_peak": 85,
             "wf_speed": 2,
             "wf_mode": "3d"
+        },
+        "3": {
+            "name": "Yaesu FT-891",
+            "brand": "auto",
+            "port": "",
+            "baud": 38400,
+            "default_addr": 0x94,
+            "detected_addr": 0x94,
+            "auto_connect": False,
+            "vfo_offset": 0,
+            "ptt_key_code": 0,
+            "ptt_key_name": "None",
+            "ptt_global": False,
+            "audio_rx_dev": "",
+            "audio_tx_dev": "",
+            "audio_spk_dev": "",
+            "audio_mic_dev": "",
+            "audio_rx_vol": 100,
+            "sql_pct": 0,
+            "rigctld_port": 4534,
+            "vcom_port": "",
+            "wf_floor": 0,
+            "wf_gain": 60,
+            "wf_peak": 85,
+            "wf_speed": 2,
+            "wf_mode": "3d"
         }
     },
+    "active_radios": ["1"],
     "aprs": {
         "rx_enabled": False,
         "radio_id": "2",
@@ -216,8 +321,10 @@ def load_config():
         else:
             for k, v in DEFAULT_CONFIG["aprs"].items():
                 raw["aprs"].setdefault(k, v)
+        if "active_radios" not in raw or not isinstance(raw["active_radios"], list):
+            raw["active_radios"] = ["1"]
         # Varmistetaan oletuskentät
-        for rid in ("1", "2"):
+        for rid in ("1", "2", "3"):
             if rid not in raw["radios"]:
                 raw["radios"][rid] = dict(DEFAULT_CONFIG["radios"][rid])
             else:
@@ -300,6 +407,45 @@ def bcd_to_hz(data):
         return 0
 
 
+def _ic9700_band(hz: int) -> str:
+    if 140000000 <= hz <= 150000000:
+        return '2m'
+    if 420000000 <= hz <= 450000000:
+        return '70cm'
+    if 1200000000 <= hz <= 1350000000:
+        return '23cm'
+    return ''
+
+
+def offset_hz_to_bcd3(offset_hz: int) -> bytes:
+    """Muuntaa erotustaajuuden (Hz) Icomin 3-tavuiseen BCD-muotoon (komento 0D: [1kHz|100Hz], [100kHz|10kHz], [10MHz|1MHz])."""
+    return hz_to_bcd(max(0, int(offset_hz)))[1:4]
+
+
+def bcd3_to_offset_hz(data: bytes) -> int:
+    if len(data) == 3:
+        return bcd_to_hz(bytes([0x00]) + data + bytes([0x00]))
+    elif len(data) >= 5:
+        return bcd_to_hz(data[:5])
+    return 0
+
+
+def ctcss_to_bcd3(tone_hz: float) -> bytes:
+    """Muuntaa CTCSS-aliäänen (esim. 123.0 Hz) Icomin 3-tavuiseen BCD-muotoon (1B 00 / 1B 01: 0x00, [100Hz|10Hz], [1Hz|0.1Hz])."""
+    tenths = max(670, min(2541, int(round(float(tone_hz) * 10))))
+    s = f"{tenths:04d}"
+    return bytes([0x00, int(s[0:2], 16), int(s[2:4], 16)])
+
+
+def bcd3_to_ctcss(data: bytes) -> float:
+    if len(data) >= 3:
+        try:
+            return int(f"{data[1]:02x}{data[2]:02x}") / 10.0
+        except Exception:
+            pass
+    return 123.0
+
+
 class RadioController:
     def __init__(self, radio_id: str, default_addr: int = 0x94):
         self.radio_id = str(radio_id)
@@ -311,7 +457,7 @@ class RadioController:
         self.radio_addr = saved_addr
         self.default_addr = default_addr
         self.scope_divs = [[] for _ in range(11)]
-        self.scope_span_hz = 50000
+        self.scope_span_hz = 100000
         self.scope_mode_center = True
         self.scope_edge_low = 0
         self.scope_edge_high = 0
@@ -322,16 +468,30 @@ class RadioController:
         self.current_band = 0  # 0 = MAIN, 1 = SUB (IC-9700)
         self.last_power_set_time = 0.0
         self.power_off_until = 0.0
+        self.ptt_release_until = 0.0
         self.cat_ptt = False
+        self.user_ptt = False
+        self.syncing = False
+        self._sync_lock = None
         self.vcom_bridge = None
+        self.ser_lock = threading.Lock()
 
         is_9700 = (self.radio_addr == 0xA2)
         default_hz = 145500000 if is_9700 else 14200000
         default_sub_hz = 433500000
         default_mode = 'FM' if is_9700 else 'USB'
-        model_str = 'IC-9700' if is_9700 else 'IC-7300'
+        self.brand = rconf.get("brand", "auto")
+        if self.brand == "yaesu":
+            model_str = rconf.get("name") or "FT-891"
+            default_hz = 14200000
+            default_mode = 'USB'
+            is_9700 = False
+        else:
+            model_str = 'IC-9700' if is_9700 else 'IC-7300'
+        self.has_hw_scope = True if self.brand != "yaesu" else False
         self.state = {
             'radio_id': self.radio_id,
+            'brand': self.brand,
             'name': model_str,
             'model': model_str,
             'port': rconf.get('port', ''),
@@ -350,6 +510,12 @@ class RadioController:
             'sub_hz': default_sub_hz,
             'sub_mode': 'FM',
             'sub_filter': 1,
+            # Toistinasetukset (VHF/UHF IC-9700):
+            'dup': 'OFF',          # 'OFF', 'DUP-', 'DUP+'
+            'offset_mhz': 1.6,     # Erotustaajuus MHz (esim. 0.6 tai 1.6)
+            'tone_mode': 'OFF',    # 'OFF', '1750Hz', 'TONE', 'TSQL'
+            'ctcss': 123.0,        # Aliääni Hz (67.0 .. 254.1)
+            'tone_burst': 0,       # 1 kun 1750 Hz avauspiippi on päällä
             'smeter': 'S0',
             'smeter_pct': 0.0,
             'sql_pct': int(rconf.get('sql_pct', 0) or 0),
@@ -360,21 +526,41 @@ class RadioController:
         }
         self._update_model_name()
 
+    def write_civ(self, cmd_bytes: bytes):
+        """Thread-safe CI-V write method."""
+        if self.ser and self.ser.is_open:
+            with self.ser_lock:
+                try:
+                    self.ser.write(cmd_bytes)
+                except Exception:
+                    pass
+
+    def write_raw(self, data_bytes: bytes):
+        """Thread-safe serial raw write method (for Yaesu CAT)."""
+        if self.ser and self.ser.is_open:
+            with self.ser_lock:
+                try:
+                    self.ser.write(data_bytes)
+                except Exception:
+                    pass
+
     def _update_model_name(self):
-        if self.radio_addr == 0x94:
-            self.state['model'] = 'IC-7300'
-            self.state['name'] = 'IC-7300'
-        elif self.radio_addr == 0xA2:
-            self.state['model'] = 'IC-9700'
-            self.state['name'] = 'IC-9700'
-        else:
-            self.state['model'] = f"ICOM (0x{self.radio_addr:02X})"
-            self.state['name'] = self.state['model']
+        if getattr(self, 'brand', 'auto') == 'yaesu':
+            saved_name = global_config.get("radios", {}).get(self.radio_id, {}).get("name", "")
+            model_name = saved_name if (saved_name and not saved_name.startswith("IC-")) else "FT-891"
+            self.state['model'] = model_name
+            self.state['name'] = model_name
+            return
+        detected_model = ICOM_MODELS.get(self.radio_addr, f"ICOM (0x{self.radio_addr:02X})")
+        self.state['model'] = detected_model
+        self.state['name'] = detected_model
         if self.radio_id in global_config.get("radios", {}):
             global_config["radios"][self.radio_id]["detected_addr"] = self.radio_addr
-            global_config["radios"][self.radio_id]["name"] = self.state['name']
+            global_config["radios"][self.radio_id]["name"] = detected_model
 
     def _enable_scope_hw(self):
+        if getattr(self, 'brand', 'auto') == 'yaesu':
+            return
         if self.ser and self.ser.is_open:
             try:
                 # 27 10 01 = Scope waveform data stream ON (IC-7300 & IC-9700)
@@ -387,49 +573,119 @@ class RadioController:
                 pass
 
     async def _sync_ic9700_dual(self):
-        """Lukee IC-9700:n molemmat vastaanottimet (MAIN & SUB) sekä Dualwatch-tilan."""
-        if not self.ser or not self.ser.is_open or self.radio_addr != 0xA2:
+        """Lukee IC-9700:n molemmat vastaanottimet (MAIN & SUB) sekä Dualwatch-tilan turvallisesti."""
+        if not self.ser or not self.ser.is_open or self.radio_addr != 0xA2 or getattr(self, 'brand', 'auto') == 'yaesu':
             return
+        was_syncing = getattr(self, 'syncing', False)
+        self.syncing = True
+        self.initial_synced = True
         try:
-            # 1. Kysytään Dualwatch-tila (16 59) ja RF Power (14 0A)
-            self.ser.write(civ_command(0x16, 0x59, None, to_addr=self.radio_addr))
+            # 1. Pysäytetään scope-datan lähetys (27 10 00) synkronoinnin ajaksi,
+            # jotta 500-tavuiset vesiputouspaketit eivät törmää CI-V-kyselyihin,
+            # ja odotetaan 80 ms että puskurissa olevat vanhat vastaukset tyhjenevät:
+            self.write_civ(civ_command(0x27, 0x10, bytes([0x00]), to_addr=self.radio_addr))
+            await asyncio.sleep(0.08)
+
+            # 2. Kysytään aktiivinen bandi (07 D2), Dualwatch-tila (16 59), RF Power (14 0A) ja PTT (1C 00)
+            self.write_civ(civ_command(0x07, 0xD2, None, to_addr=self.radio_addr))
+            await asyncio.sleep(0.05)
+            self.write_civ(civ_command(0x16, 0x59, None, to_addr=self.radio_addr))
+            await asyncio.sleep(0.05)
+            self.write_civ(civ_command(0x14, 0x0A, None, to_addr=self.radio_addr))
             await asyncio.sleep(0.04)
-            self.ser.write(civ_command(0x14, 0x0A, None, to_addr=self.radio_addr))
-            await asyncio.sleep(0.04)
-            # 2. Luetaan SUB-puolen taajuus ja mode (07 D1 -> 03 -> 04)
+            self.write_civ(civ_command(0x1C, 0x00, None, to_addr=self.radio_addr))
+            await asyncio.sleep(0.05)
+
+            orig_band = self.state.get('active_band', 0)
+
+            # Jos Dualwatch on pois päältä, kytketään se päälle (16 59 01) jotta SUB VFO on luettavissa
+            if self.state.get('dual_rx', 0) == 0:
+                self.state['dual_rx'] = 1
+                self.write_civ(civ_command(0x16, 0x59, bytes([0x01]), to_addr=self.radio_addr))
+                await asyncio.sleep(0.06)
+
+            # 3. Vaihdetaan SUB VFO:lle (07 D1), odotetaan että siirto on valmis, ja luetaan SUB taajuus (03) & mode (04)
+            self.write_civ(civ_command(0x07, 0xD1, None, to_addr=self.radio_addr))
+            await asyncio.sleep(0.08)
             self.current_band = 1
-            self.ser.write(civ_command(0x07, 0xD1, None, to_addr=self.radio_addr))
-            await asyncio.sleep(0.05)
-            self.ser.write(civ_command(0x03, None, None, to_addr=self.radio_addr))
-            await asyncio.sleep(0.04)
-            self.ser.write(civ_command(0x04, None, None, to_addr=self.radio_addr))
-            await asyncio.sleep(0.05)
-            # 3. Palataan MAIN-puolelle ja luetaan sen taajuus, mode, data-tila ja RF Power
+            self.state['active_band'] = 1
+            self.write_civ(civ_command(0x03, None, None, to_addr=self.radio_addr))
+            await asyncio.sleep(0.08)
+            self.write_civ(civ_command(0x04, None, None, to_addr=self.radio_addr))
+            await asyncio.sleep(0.08)
+
+            # 4. Vaihdetaan MAIN VFO:lle (07 D0), odotetaan että SUB-vastaukset on luettu, ja luetaan MAIN taajuus (03) & mode (04)
+            self.write_civ(civ_command(0x07, 0xD0, None, to_addr=self.radio_addr))
+            await asyncio.sleep(0.08)
             self.current_band = 0
             self.state['active_band'] = 0
-            self.ser.write(civ_command(0x07, 0xD0, None, to_addr=self.radio_addr))
+            self.write_civ(civ_command(0x03, None, None, to_addr=self.radio_addr))
+            await asyncio.sleep(0.08)
+            self.write_civ(civ_command(0x04, None, None, to_addr=self.radio_addr))
+            await asyncio.sleep(0.08)
+            self.write_civ(civ_command(0x1A, 0x06, None, to_addr=self.radio_addr))
             await asyncio.sleep(0.05)
-            self.ser.write(civ_command(0x03, None, None, to_addr=self.radio_addr))
-            await asyncio.sleep(0.04)
-            self.ser.write(civ_command(0x04, None, None, to_addr=self.radio_addr))
-            await asyncio.sleep(0.04)
-            self.ser.write(civ_command(0x1A, 0x06, None, to_addr=self.radio_addr))
-            await asyncio.sleep(0.04)
-            self.ser.write(civ_command(0x14, 0x0A, None, to_addr=self.radio_addr))
-            await asyncio.sleep(0.04)
+            # Luetaan myös toistinasetukset (DUP, Offset, Tone, TSQL, CTCSS)
+            for r_cmd in (
+                civ_command(0x0F, None, None, to_addr=self.radio_addr),
+                civ_command(0x0C, None, None, to_addr=self.radio_addr),
+                civ_command(0x16, 0x42, None, to_addr=self.radio_addr),
+                civ_command(0x16, 0x43, None, to_addr=self.radio_addr),
+                civ_command(0x1B, 0x00, None, to_addr=self.radio_addr),
+            ):
+                self.write_civ(r_cmd)
+                await asyncio.sleep(0.035)
+
+            # 5. Jos SUB oli alun perin valittuna, palautetaan valinta SUB VFO:lle
+            if orig_band == 1:
+                self.write_civ(civ_command(0x07, 0xD1, None, to_addr=self.radio_addr))
+                await asyncio.sleep(0.07)
+                self.current_band = 1
+                self.state['active_band'] = 1
+                self.state['taajuus_hz'] = self.state.get('sub_hz', self.state['taajuus_hz'])
+                self.state['mode'] = self.state.get('sub_mode', self.state['mode'])
+                self.state['filter'] = self.state.get('sub_filter', self.state['filter'])
+            else:
+                self.current_band = 0
+                self.state['active_band'] = 0
+                self.state['taajuus_hz'] = self.state.get('main_hz', self.state['taajuus_hz'])
+                self.state['mode'] = self.state.get('main_mode', self.state['mode'])
+                self.state['filter'] = self.state.get('main_filter', self.state['filter'])
+            self.state['taajuus_mhz'] = f"{(self.state['taajuus_hz'] / 1000000):.6f}"
+
+            self._enable_scope_hw()
             await broadcast_state(self.radio_id)
         except Exception as e:
             logging.debug(f"IC-9700 dual sync error: {e}")
+        finally:
+            if not was_syncing:
+                self.syncing = False
 
     async def _sync_initial_state(self):
         """Hakee radion kaikki nykyiset asetukset (taajuus, mode, filtteri, DATA, RF Power, PTT, Dual RX) heti yhdistettäessä."""
-        if not self.ser or not self.ser.is_open:
+        if not self.ser or not self.ser.is_open or getattr(self, 'syncing', False):
             return
+        self.syncing = True
+        self.initial_synced = True
         try:
+            if getattr(self, 'brand', 'auto') == 'yaesu':
+                # EX11051; varmistaa 11-05 SSB MIC SELECT = REAR (1) ja EX1107; lukee 11-07 SSB BFO -tilan
+                self.write_raw(b"AI0;TX0;EX11051;ID;FA;MD0;EX1107;SM0;PC;")
+                await asyncio.sleep(0.05)
+                await broadcast_state(self.radio_id)
+                return
+
+            if self.radio_addr == 0xA2:
+                self.write_civ(civ_command(0x19, 0x00, None, to_addr=self.radio_addr))
+                await asyncio.sleep(0.04)
+                await self._sync_ic9700_dual()
+                return
+
             self._enable_scope_hw()
             await asyncio.sleep(0.03)
             # Kysytään RF Power (14 0A), taajuus (03), mode/filtteri (04), DATA-tila (1A 06), PTT (1C 00) ja S-mittari (15 02)
             for cmd_bytes in (
+                civ_command(0x19, 0x00, None, to_addr=self.radio_addr),
                 civ_command(0x14, 0x0A, None, to_addr=self.radio_addr),
                 civ_command(0x03, None, None, to_addr=self.radio_addr),
                 civ_command(0x04, None, None, to_addr=self.radio_addr),
@@ -438,15 +694,14 @@ class RadioController:
                 civ_command(0x15, 0x02, None, to_addr=self.radio_addr),
             ):
                 if self.ser and self.ser.is_open:
-                    self.ser.write(cmd_bytes)
+                    self.write_civ(cmd_bytes)
                     await asyncio.sleep(0.035)
 
-            if self.radio_addr == 0xA2:
-                await self._sync_ic9700_dual()
-            else:
-                await broadcast_state(self.radio_id)
+            await broadcast_state(self.radio_id)
         except Exception as e:
             logging.debug(f"Radio {self.radio_id} initial sync error: {e}")
+        finally:
+            self.syncing = False
 
     async def connect(self, port, baudrate):
         await self.disconnect_async()
@@ -468,11 +723,22 @@ class RadioController:
             self.ser.port = port
             self.ser.baudrate = int(baudrate)
             self.ser.timeout = 0
-            self.ser.setDTR(False)
-            self.ser.setRTS(False)
-            self.ser.open()
+            self.ser.dtr = True
+            self.ser.rts = True
+            try:
+                self.ser.open()
+            except PermissionError:
+                await asyncio.sleep(0.3)
+                self.ser.open()
+            self.ser.dtr = True
+            self.ser.rts = True
 
             self.running = True
+            self.initial_synced = False
+            self.user_ptt = False
+            self.cat_ptt = False
+            self.ptt_release_until = time.monotonic() + 0.8
+            self.state['ptt'] = 0
             self.state['connected'] = True
             self.state['online'] = False
             self.last_scope_time = 0.0
@@ -481,15 +747,30 @@ class RadioController:
 
             self.reader_task = asyncio.create_task(self._read_serial_loop())
 
-            # Kysytään aluksi sekä tunnetulta osoitteelta että molemmilta Icom-osoitteilta (0x94 = IC-7300, 0xA2 = IC-9700)
-            await asyncio.sleep(0.10)
-            for probe_addr in [self.radio_addr, 0x94, 0xA2, 0x00]:
-                if self.ser and self.ser.is_open:
-                    self.ser.write(civ_command(0x03, None, None, to_addr=probe_addr))
-                    await asyncio.sleep(0.03)
+            # Kysytään aloituskyselyt ilman ylimääräisiä päällekkäisiä kyselyitä
+            await asyncio.sleep(0.05)
+            if getattr(self, 'brand', 'auto') == 'yaesu':
+                self.write_raw(b"AI0;TX0;ID;FA;MD0;")
+                await asyncio.sleep(0.06)
 
-            await asyncio.sleep(0.10)
-            if self.state['online']:
+            if not self.state['online']:
+                seen_addrs = []
+                for probe_addr in [self.radio_addr, 0x94, 0xA2, 0x98, 0x8E, 0xA4, 0x00]:
+                    if self.state['online']:
+                        break
+                    if probe_addr in seen_addrs:
+                        continue
+                    seen_addrs.append(probe_addr)
+                    if self.ser and self.ser.is_open:
+                        self.write_civ(civ_command(0x03, None, None, to_addr=probe_addr))
+                        await asyncio.sleep(0.04)
+                if not self.state['online']:
+                    self.write_raw(b"AI0;TX0;ID;FA;MD0;")
+                    await asyncio.sleep(0.06)
+
+            while getattr(self, 'syncing', False):
+                await asyncio.sleep(0.04)
+            if self.state['online'] and not getattr(self, 'initial_synced', False):
                 await self._sync_initial_state()
 
             self.poller_task = asyncio.create_task(self._poll_loop())
@@ -520,6 +801,9 @@ class RadioController:
         try:
             if power_on:
                 self.power_off_until = 0.0
+                if getattr(self, 'brand', 'auto') == 'yaesu':
+                    self.write_raw(b"PS1;ID;FA;MD0;")
+                    return {"status": "ok"}
                 if baud >= 115200:
                     fe_count = 155
                 elif baud >= 57600:
@@ -547,11 +831,15 @@ class RadioController:
                 # nostamasta tilaa takaisin ONLINEksi
                 self.power_off_until = time.monotonic() + 4.0
                 self.last_radio_reply = 0.0
+                self.user_ptt = False
                 self.state['online'] = False
                 self.state['ptt'] = 0
                 self.state['smeter'] = 'S0'
                 self.state['smeter_pct'] = 0.0
-                self.ser.write(civ_command(0x18, 0x00, None, to_addr=self.radio_addr))
+                if getattr(self, 'brand', 'auto') == 'yaesu':
+                    self.write_raw(b"TX0;PS0;")
+                else:
+                    self.ser.write(civ_command(0x18, 0x00, None, to_addr=self.radio_addr))
                 try:
                     self.ser.reset_input_buffer()
                 except Exception:
@@ -564,11 +852,15 @@ class RadioController:
 
     async def disconnect_async(self):
         self.running = False
+        self.user_ptt = False
+        self.cat_ptt = False
         self.state['connected'] = False
         self.state['online'] = False
         self.state['ptt'] = 0
         self.state['smeter'] = 'S0'
         self.state['smeter_pct'] = 0.0
+        if 'audio_manager' in globals() and self.radio_id in audio_manager.channels:
+            audio_manager.channels[self.radio_id]._stop_tx_stream()
         for t in (self.reader_task, self.poller_task):
             if t and not t.done():
                 t.cancel()
@@ -577,7 +869,10 @@ class RadioController:
         if self.ser and self.ser.is_open:
             try:
                 # Varmistetaan että PTT vapautuu yhteyden katketessa
-                self.ser.write(civ_command(0x1C, 0x00, bytes([0x00]), to_addr=self.radio_addr))
+                if getattr(self, 'brand', 'icom') == 'yaesu':
+                    self.ser.write(b"TX0;")
+                else:
+                    self.ser.write(civ_command(0x1C, 0x00, bytes([0x00]), to_addr=self.radio_addr))
                 self.ser.close()
             except Exception:
                 pass
@@ -586,12 +881,19 @@ class RadioController:
 
     def disconnect_sync(self):
         self.running = False
+        self.user_ptt = False
+        self.cat_ptt = False
         self.state['connected'] = False
         self.state['online'] = False
+        if 'audio_manager' in globals() and self.radio_id in audio_manager.channels:
+            audio_manager.channels[self.radio_id]._stop_tx_stream()
         if self.ser and self.ser.is_open:
             try:
                 # Varmistetaan että PTT vapautuu yhteyden katketessa
-                self.ser.write(civ_command(0x1C, 0x00, bytes([0x00]), to_addr=self.radio_addr))
+                if getattr(self, 'brand', 'icom') == 'yaesu':
+                    self.ser.write(b"TX0;")
+                else:
+                    self.ser.write(civ_command(0x1C, 0x00, bytes([0x00]), to_addr=self.radio_addr))
                 self.ser.close()
             except Exception:
                 pass
@@ -604,44 +906,69 @@ class RadioController:
                 waiting = self.ser.in_waiting if (self.ser and self.ser.is_open) else 0
                 if waiting > 0:
                     buffer.extend(self.ser.read(waiting))
-                    while 0xFD in buffer:
-                        idx = buffer.find(b'\xfd')
-                        msg = buffer[:idx+1]
-                        buffer = buffer[idx+1:]
 
-                        if b'\xfe\xfe' in msg:
-                            msg = msg[msg.find(b'\xfe\xfe'):]
-                            if self.vcom_bridge and self.vcom_bridge.vser and self.vcom_bridge.vser.is_open:
-                                try:
-                                    self.vcom_bridge.vser.write(msg)
-                                except Exception:
-                                    pass
-                            # Jos radio on juuri sammutettu (Power OFF), ohitetaan sammumisen hännystavut
-                            if time.monotonic() < self.power_off_until:
+                    # 1. Tarkistetaan Icom CI-V kehykset (FE FE ... FD)
+                    while b'\xfe\xfe' in buffer:
+                        idx_fe = buffer.find(b'\xfe\xfe')
+                        idx_fd = buffer.find(b'\xfd', idx_fe)
+                        if idx_fd == -1:
+                            # Kehys on vielä kesken
+                            break
+                        msg = buffer[idx_fe:idx_fd+1]
+                        buffer = buffer[idx_fd+1:]
+
+                        if self.vcom_bridge and self.vcom_bridge.vser and self.vcom_bridge.vser.is_open:
+                            try:
+                                self.vcom_bridge.vser.write(msg)
+                            except Exception:
+                                pass
+                        if time.monotonic() < self.power_off_until:
+                            continue
+                        if len(msg) >= 7 and msg[3] == 0xE0 and msg[4] == 0x07:
+                            if msg[5] == 0xD0:
+                                self.current_band = 0
+                            elif msg[5] == 0xD1:
+                                self.current_band = 1
+                        if len(msg) >= 6 and (msg[2] == 0xE0 or msg[2] == 0x00) and msg[3] != 0xE0:
+                            if len(msg) < 7 or msg[4] in (0xFA, 0xFB):
                                 continue
-                            # Seurataan myös lähetettyjen 07 D0 / 07 D1 komentojen echoa jotta tiedämme kumpi bandi vastaa
-                            if len(msg) >= 7 and msg[3] == 0xE0 and msg[4] == 0x07:
-                                if msg[5] == 0xD0:
-                                    self.current_band = 0
-                                elif msg[5] == 0xD1:
-                                    self.current_band = 1
-                            # Aito vastaus radiolta (ei tietokoneen oma CI-V echo, jossa msg[3] == 0xE0)
-                            if len(msg) >= 6 and (msg[2] == 0xE0 or msg[2] == 0x00) and msg[3] != 0xE0:
-                                # Pelkkä 6 tavun kuittaus (0xFB=OK tai 0xFA=NG) ei tarkoita että radio on päällä,
-                                # sillä valmiustilassa oleva CI-V-väylä voi vastata 0xFA ja sammutuskomento 18 00 kuittaa 0xFB.
-                                if len(msg) < 7 or msg[4] in (0xFA, 0xFB):
-                                    continue
-                                model_changed = (self.radio_addr != msg[3])
-                                if model_changed:
-                                    self.radio_addr = msg[3]
-                                    self._update_model_name()
-                                    save_config(global_config)
-                                was_offline = not self.state['online']
-                                self.last_radio_reply = time.monotonic()
-                                self.state['online'] = True
-                                if was_offline or model_changed:
-                                    asyncio.create_task(self._sync_initial_state())
-                                await self._parse_civ(msg, force_broadcast=(was_offline or model_changed))
+                            self.brand = 'icom'
+                            self.state['brand'] = 'icom'
+                            self.has_hw_scope = True
+                            model_changed = (self.radio_addr != msg[3])
+                            if model_changed:
+                                self.radio_addr = msg[3]
+                                self._update_model_name()
+                                save_config(global_config)
+                            was_offline = not self.state['online']
+                            self.last_radio_reply = time.monotonic()
+                            self.state['online'] = True
+                            if was_offline or model_changed:
+                                asyncio.create_task(self._sync_initial_state())
+                            await self._parse_civ(msg, force_broadcast=(was_offline or model_changed))
+
+                    # 2. Tarkistetaan Yaesu ASCII kehykset (; päätteiset)
+                    while b';' in buffer:
+                        if b'\xfe\xfe' in buffer:
+                            break
+                        idx_semi = buffer.find(b';')
+                        chunk = buffer[:idx_semi+1]
+                        buffer = buffer[idx_semi+1:]
+                        try:
+                            text_cmd = chunk.decode('ascii', errors='ignore').strip()
+                            if text_cmd.endswith(';'):
+                                cmd2 = text_cmd[:2].upper()
+                                if cmd2 in ('ID', 'FA', 'FB', 'MD', 'SM', 'TX', 'PC', 'AC', 'IF', 'AI', 'PS', 'EX'):
+                                    self.brand = 'yaesu'
+                                    self.state['brand'] = 'yaesu'
+                                    self.has_hw_scope = False
+                                    await self._parse_yaesu(text_cmd)
+                        except Exception:
+                            pass
+
+                    if len(buffer) > 4096:
+                        buffer = buffer[-512:]
+
                     await asyncio.sleep(0.001)
                 else:
                     await asyncio.sleep(0.004)
@@ -660,77 +987,289 @@ class RadioController:
                 await broadcast_state(self.radio_id)
                 break
 
+    async def _parse_yaesu(self, text: str, force_broadcast=False):
+        state_changed = force_broadcast
+        was_offline = not self.state['online']
+        self.state['online'] = True
+        self.last_radio_reply = time.monotonic()
+
+        text = text.strip()
+        if not text.endswith(';'):
+            return
+
+        cmd = text[:2].upper()
+        body = text[2:-1]
+
+        if cmd == 'ID':
+            model_name = YAESU_MODELS.get(body, f"FT-{body}" if body else "Yaesu")
+            self.brand = 'yaesu'
+            self.state['brand'] = 'yaesu'
+            self.has_hw_scope = False
+            was_model = self.state.get('model')
+            cur_baud = self.ser.baudrate if self.ser else self.state.get('baud')
+            if was_model != model_name or self.state.get('baud') != cur_baud:
+                self.state['model'] = model_name
+                self.state['name'] = model_name
+                if cur_baud:
+                    self.state['baud'] = cur_baud
+                    global_config["radios"].setdefault(self.radio_id, {})["baud"] = cur_baud
+                state_changed = True
+                global_config["radios"].setdefault(self.radio_id, {})["name"] = model_name
+                global_config["radios"][self.radio_id]["brand"] = "yaesu"
+                save_config(global_config)
+                self.write_raw(b"AI0;")
+                if was_offline:
+                    asyncio.create_task(self._sync_initial_state())
+
+        elif cmd == 'FA':
+            try:
+                hz = int(body)
+                if hz > 0 and self.state.get('taajuus_hz') != hz:
+                    self.state['taajuus_hz'] = hz
+                    self.state['taajuus_mhz'] = f"{(hz / 1000000):.6f}"
+                    self.state['main_hz'] = hz
+                    state_changed = True
+            except ValueError:
+                pass
+
+        elif cmd == 'FB':
+            try:
+                hz = int(body)
+                if hz > 0 and self.state.get('sub_hz') != hz:
+                    self.state['sub_hz'] = hz
+                    state_changed = True
+            except ValueError:
+                pass
+
+        elif cmd == 'MD':
+            if len(body) >= 2 and body[0] == '0':
+                m_code = body[1].upper()
+                YAESU_MODES = {
+                    "1": "LSB", "2": "USB", "3": "CW", "4": "FM", "5": "AM",
+                    "6": "RTTY", "7": "CW", "8": "LSB-D", "9": "RTTY",
+                    "A": "FM-D", "B": "FM", "C": "USB-D", "D": "AM", "E": "FM"
+                }
+                new_mode = YAESU_MODES.get(m_code, "USB")
+                # Yaesu FT-891:ssa SSB-tilassa (MD01/MD02) todellinen sivukaista (LSB vs USB)
+                # määräytyy valikon 11-07 [SSB BFO] (EX1107: 0=USB, 1=LSB, 2=AUTO) mukaan:
+                if m_code in ("1", "2"):
+                    bfo = getattr(self, 'yaesu_ssb_bfo', None)
+                    if bfo == '0':
+                        new_mode = "USB"
+                    elif bfo == '1':
+                        new_mode = "LSB"
+                is_data = new_mode.endswith('-D')
+                if self.state.get('mode') != new_mode or self.state.get('data_on') != is_data:
+                    self.state['mode'] = new_mode
+                    self.state['main_mode'] = new_mode
+                    self.state['data_on'] = is_data
+                    state_changed = True
+
+        elif cmd == 'EX':
+            # 11-07 [SSB BFO]: EX11070; = USB, EX11071; = LSB, EX11072; = AUTO
+            if body.startswith('1107') and len(body) >= 5:
+                bfo_code = body[4]
+                self.yaesu_ssb_bfo = bfo_code
+                cur_m = self.state.get('mode', 'USB')
+                if cur_m in ('LSB', 'USB'):
+                    actual_ssb = 'USB' if bfo_code == '0' else ('LSB' if bfo_code == '1' else cur_m)
+                    if cur_m != actual_ssb:
+                        self.state['mode'] = actual_ssb
+                        self.state['main_mode'] = actual_ssb
+                        state_changed = True
+
+        elif cmd == 'SM':
+            try:
+                val = int(body[1:]) if (len(body) > 1 and body[0] == '0') else int(body)
+                # Yaesu FT-891 hardware SM0nnn (0..255) calibration:
+                # 0..126 = S0..S9 (126 = S9 -> mapped to 60.0% on the UI S-meter bar)
+                # 127..230 = S9+5dB..S9+60dB (143 = S9+10dB, 160 = S9+20dB, 195 = S9+40dB, 230 = S9+60dB)
+                if val <= 4:
+                    s_str = "S0"
+                    s_pct = 0.0
+                elif val <= 126:
+                    s_unit = max(1, min(9, int(round((val / 126.0) * 9.0))))
+                    s_str = f"S{s_unit}"
+                    s_pct = round((val / 126.0) * 60.0, 2)
+                else:
+                    over_db = min(60, max(5, int(round(((val - 126.0) / 104.0) * 60.0 / 5.0)) * 5))
+                    s_str = f"S9 + {over_db}dB"
+                    s_pct = round(min(100.0, 60.0 + ((val - 126.0) / 104.0) * 40.0), 2)
+
+                if self.state.get('smeter') != s_str or abs(float(self.state.get('smeter_pct', 0)) - s_pct) >= 0.8:
+                    self.state['smeter'] = s_str
+                    self.state['smeter_pct'] = s_pct
+                    state_changed = True
+
+                ch = audio_manager.channels.get(self.radio_id) if 'audio_manager' in globals() else None
+                if ch is not None and ch.sql_pct > 0.0 and s_pct >= ch.sql_pct:
+                    ch.sql_last_open = time.monotonic()
+            except ValueError:
+                pass
+
+        elif cmd == 'PC':
+            try:
+                pwr = int(body)
+                if self.state.get('power_pct') != pwr:
+                    self.state['power_pct'] = pwr
+                    state_changed = True
+            except ValueError:
+                pass
+
+        elif cmd == 'TX':
+            is_tx = (body in ('1', '2'))
+            # Estetään SignaLinkin VOX-viiveen (DLY hang-time) aiheuttama PTT:n uudelleenlukittuminen
+            # heti sen jälkeen kun käyttäjä on vapauttanut PTT-napin:
+            if is_tx and not getattr(self, 'user_ptt', False) and time.monotonic() < getattr(self, 'ptt_release_until', 0.0):
+                return
+            tila = 1 if is_tx else 0
+            if self.state.get('ptt') != tila:
+                self.state['ptt'] = tila
+                state_changed = True
+
+        elif cmd == 'AC':
+            is_on = (body == '001')
+            t_val = 1 if is_on else 0
+            if self.state.get('atu') != t_val:
+                self.state['atu'] = t_val
+                state_changed = True
+
+        if state_changed or was_offline:
+            await broadcast_state(self.radio_id)
+
     async def _parse_civ(self, msg, force_broadcast=False):
         if len(msg) < 6:
             return
         cmd = msg[4]
         state_changed = force_broadcast
+        in_tune_guard = time.monotonic() < getattr(self, 'tune_guard_until', 0.0)
 
         # Taajuus (00 tai 03)
         if (cmd == 0x00 or cmd == 0x03) and len(msg) >= 11:
-            hz = bcd_to_hz(msg[5:10])
-            if hz > 0:
-                if self.state['taajuus_hz'] != hz:
-                    self.state['taajuus_hz'] = hz
-                    self.state['taajuus_mhz'] = f"{(hz / 1000000):.6f}"
-                    state_changed = True
-                if self.current_band == 1:
-                    if self.state['sub_hz'] != hz:
-                        self.state['sub_hz'] = hz
+            if not in_tune_guard:
+                hz = bcd_to_hz(msg[5:10])
+                if hz > 0:
+                    if self.state['taajuus_hz'] != hz:
+                        self.state['taajuus_hz'] = hz
+                        self.state['taajuus_mhz'] = f"{(hz / 1000000):.6f}"
                         state_changed = True
-                else:
-                    if self.state['main_hz'] != hz:
-                        self.state['main_hz'] = hz
-                        state_changed = True
+                    if self.current_band == 1:
+                        if self.state['sub_hz'] != hz:
+                            self.state['sub_hz'] = hz
+                            state_changed = True
+                    else:
+                        if self.state['main_hz'] != hz:
+                            self.state['main_hz'] = hz
+                            state_changed = True
 
         # Mode (01 tai 04)
         elif (cmd == 0x01 or cmd == 0x04) and len(msg) >= 7:
-            m_byte = msg[5]
-            fil_val = int(msg[6]) if (len(msg) >= 8 and msg[6] in (1, 2, 3)) else self.state.get('filter', 1)
-            self.state['filter'] = fil_val
-            inv_mode = {
-                0x00: "LSB", 0x01: "USB", 0x02: "AM",
-                0x03: "CW", 0x04: "RTTY", 0x05: "FM",
-                0x07: "CW", 0x08: "RTTY", 0x17: "DV"
-            }
-            base_mode = inv_mode.get(m_byte, "USB")
-            new_mode = f"{base_mode}-D" if (self.state.get('data_on') and base_mode in ("LSB", "USB", "FM")) else base_mode
-            if self.state['mode'] != new_mode:
-                self.state['mode'] = new_mode
-                state_changed = True
-            if self.current_band == 1:
-                if self.state['sub_mode'] != new_mode or self.state['sub_filter'] != fil_val:
-                    self.state['sub_mode'] = new_mode
-                    self.state['sub_filter'] = fil_val
+            if not in_tune_guard:
+                m_byte = msg[5]
+                fil_val = int(msg[6]) if (len(msg) >= 8 and msg[6] in (1, 2, 3)) else self.state.get('filter', 1)
+                self.state['filter'] = fil_val
+                inv_mode = {
+                    0x00: "LSB", 0x01: "USB", 0x02: "AM",
+                    0x03: "CW", 0x04: "RTTY", 0x05: "FM",
+                    0x07: "CW", 0x08: "RTTY", 0x17: "DV"
+                }
+                base_mode = inv_mode.get(m_byte, "USB")
+                new_mode = f"{base_mode}-D" if (self.state.get('data_on') and base_mode in ("LSB", "USB", "FM")) else base_mode
+                if self.state['mode'] != new_mode:
+                    self.state['mode'] = new_mode
                     state_changed = True
-            else:
-                if self.state['main_mode'] != new_mode or self.state['main_filter'] != fil_val:
-                    self.state['main_mode'] = new_mode
-                    self.state['main_filter'] = fil_val
-                    state_changed = True
+                if self.current_band == 1:
+                    if self.state['sub_mode'] != new_mode or self.state['sub_filter'] != fil_val:
+                        self.state['sub_mode'] = new_mode
+                        self.state['sub_filter'] = fil_val
+                        state_changed = True
+                else:
+                    if self.state['main_mode'] != new_mode or self.state['main_filter'] != fil_val:
+                        self.state['main_mode'] = new_mode
+                        self.state['main_filter'] = fil_val
+                        state_changed = True
 
         # IC-9700 Aktiivinen Bandi (07 D2: 00=MAIN, 01=SUB)
         elif cmd == 0x07 and len(msg) >= 8 and msg[5] == 0xD2:
-            ab = 1 if msg[6] == 0x01 else 0
-            self.current_band = ab
-            if self.state['active_band'] != ab:
-                self.state['active_band'] = ab
-                if ab == 1:
-                    self.state['taajuus_hz'] = self.state['sub_hz']
-                    self.state['mode'] = self.state['sub_mode']
-                    self.state['filter'] = self.state['sub_filter']
-                else:
-                    self.state['taajuus_hz'] = self.state['main_hz']
-                    self.state['mode'] = self.state['main_mode']
-                    self.state['filter'] = self.state['main_filter']
-                self.state['taajuus_mhz'] = f"{(self.state['taajuus_hz'] / 1000000):.6f}"
-                state_changed = True
+            if not in_tune_guard:
+                ab = 1 if msg[6] == 0x01 else 0
+                self.current_band = ab
+                if self.state['active_band'] != ab:
+                    self.state['active_band'] = ab
+                    if ab == 1:
+                        self.state['taajuus_hz'] = self.state['sub_hz']
+                        self.state['mode'] = self.state['sub_mode']
+                        self.state['filter'] = self.state['sub_filter']
+                    else:
+                        self.state['taajuus_hz'] = self.state['main_hz']
+                        self.state['mode'] = self.state['main_mode']
+                        self.state['filter'] = self.state['main_filter']
+                    self.state['taajuus_mhz'] = f"{(self.state['taajuus_hz'] / 1000000):.6f}"
+                    state_changed = True
 
         # IC-9700 Dualwatch / Sub Band ON/OFF (16 59: 00=Single RX, 01=Dual RX)
         elif cmd == 0x16 and len(msg) >= 8 and msg[5] == 0x59:
             dw = 1 if msg[6] == 0x01 else 0
             if self.state['dual_rx'] != dw:
                 self.state['dual_rx'] = dw
+                state_changed = True
+
+        # Toistinääni (Repeater Tone 16 42: 00=OFF, 01=ON) ja TSQL (16 43: 00=OFF, 01=ON)
+        elif cmd == 0x16 and len(msg) >= 8 and msg[5] in (0x42, 0x43):
+            if not in_tune_guard:
+                is_on = (msg[6] == 0x01)
+                if msg[5] == 0x42:
+                    if is_on and self.state.get('tone_mode') != 'TONE':
+                        self.state['tone_mode'] = 'TONE'
+                        state_changed = True
+                    elif not is_on and self.state.get('tone_mode') == 'TONE':
+                        self.state['tone_mode'] = 'OFF'
+                        state_changed = True
+                elif msg[5] == 0x43:
+                    if is_on and self.state.get('tone_mode') != 'TSQL':
+                        self.state['tone_mode'] = 'TSQL'
+                        state_changed = True
+                    elif not is_on and self.state.get('tone_mode') == 'TSQL':
+                        self.state['tone_mode'] = 'OFF'
+                        state_changed = True
+
+        # Duplex-suunta (0F: 10=Simplex/OFF, 11=DUP-, 12=DUP+)
+        elif cmd == 0x0F and len(msg) >= 7:
+            if not in_tune_guard:
+                d_map = {0x10: 'OFF', 0x11: 'DUP-', 0x12: 'DUP+'}
+                if msg[5] in d_map:
+                    new_dup = d_map[msg[5]]
+                    if self.state.get('dup') != new_dup:
+                        self.state['dup'] = new_dup
+                        state_changed = True
+
+        # Duplex-erotustaajuuden luku (0C)
+        elif cmd == 0x0C and len(msg) >= 9:
+            if not in_tune_guard:
+                off_hz = bcd3_to_offset_hz(msg[5:-1])
+                if off_hz > 0:
+                    off_mhz = round(off_hz / 1000000.0, 3)
+                    if self.state.get('offset_mhz') != off_mhz:
+                        self.state['offset_mhz'] = off_mhz
+                        state_changed = True
+
+        # CTCSS-aliäänitaajuuden luku (1B 00 = Tone, 1B 01 = TSQL)
+        elif cmd == 0x1B and len(msg) >= 10 and msg[5] in (0x00, 0x01):
+            if not in_tune_guard:
+                c_hz = bcd3_to_ctcss(msg[6:9])
+                if 60.0 <= c_hz <= 260.0 and self.state.get('ctcss') != c_hz:
+                    self.state['ctcss'] = c_hz
+                    state_changed = True
+
+        # Transceiver Model ID (19 00)
+        elif cmd == 0x19 and len(msg) >= 7 and msg[5] == 0x00:
+            dev_id = msg[-2]
+            detected_model = ICOM_MODELS.get(dev_id)
+            if detected_model and self.state.get('model') != detected_model:
+                self.state['model'] = detected_model
+                self.state['name'] = detected_model
+                if self.radio_id in global_config.get("radios", {}):
+                    global_config["radios"][self.radio_id]["name"] = detected_model
                 state_changed = True
 
         # Data-tilan luku (1A 06)
@@ -801,17 +1340,20 @@ class RadioController:
                 real_div = (bcd // 16) * 10 + (bcd % 16)
                 if real_div == 1:
                     try:
-                        scope_mode = msg[8] if len(msg) > 8 else 0
-                        if scope_mode in (0, 2):  # Center mode
-                            if len(msg) >= 16:
-                                span_code = msg[15]
-                                SPAN_MAP = {
-                                    0: 5000, 1: 10000, 2: 20000, 3: 50000,
-                                    4: 100000, 5: 200000, 6: 500000, 7: 1000000
-                                }
-                                self.scope_span_hz = SPAN_MAP.get(span_code, 50000)
-                                self.scope_mode_center = True
-                        elif scope_mode in (1, 3):  # Fixed mode
+                        # msg[8] on MaxDiv (0x11), msg[9] on Scope Mode:
+                        # 0x00 = Center, 0x01 = Fixed, 0x02 = Scroll-C, 0x03 = Scroll-F
+                        scope_mode = msg[9] if len(msg) > 9 else 0
+                        if scope_mode == 0:  # Center mode: msg[10:15]=Center BCD, msg[15:20]=Half-Span (±Hz) BCD
+                            if len(msg) >= 20:
+                                f_center = bcd_to_hz(msg[10:15])
+                                half_span = bcd_to_hz(msg[15:20])
+                                if 1000 <= half_span <= 5000000:
+                                    self.scope_span_hz = half_span * 2
+                                    self.scope_mode_center = True
+                                    if f_center > 0:
+                                        self.scope_edge_low = f_center - half_span
+                                        self.scope_edge_high = f_center + half_span
+                        elif scope_mode in (1, 2, 3):  # Fixed / Scroll mode: msg[10:15]=Low BCD, msg[15:20]=High BCD
                             if len(msg) >= 20:
                                 f_low = bcd_to_hz(msg[10:15])
                                 f_high = bcd_to_hz(msg[15:20])
@@ -834,19 +1376,38 @@ class RadioController:
                         for part in self.scope_divs[:10]:
                             full_row.extend(part)
                         if len(full_row) == 475:
+                            try:
+                                # Pidetään Icomin 475 biniä täysin terävinä (ilman horisontaalista blur-suodinta!)
+                                # ja korostetaan kapeita signaalihuippuja 1D Unsharp Mask -terävöityksellä:
+                                arr = np.array(full_row, dtype=np.float32)
+                                lap = np.zeros_like(arr)
+                                lap[1:-1] = arr[1:-1] - 0.5 * (arr[:-2] + arr[2:])
+                                arr_sharp = arr + np.maximum(0.0, lap) * 0.48
+
+                                # 72. persentiili edustaa todellisen pohjakohinan yläreunaa (aiempi 25. persentiili
+                                # jätti 75% pohjakohinasta kynnyksen yläpuolelle aiheuttaen leveää "mössöä" 2D-vesiputoukseen):
+                                p_floor = float(np.percentile(arr, 72))
+                                if not hasattr(self, 'scope_noise_floor'):
+                                    self.scope_noise_floor = p_floor
+                                alpha = 0.28 if p_floor < self.scope_noise_floor else 0.08
+                                self.scope_noise_floor = (1.0 - alpha) * self.scope_noise_floor + alpha * p_floor
+                                snr = np.maximum(0.0, arr_sharp - (self.scope_noise_floor + 1.2))
+                                processed_row = np.round(np.clip(snr * 2.15, 0.0, 160.0), 1).tolist()
+                            except Exception:
+                                processed_row = full_row
                             ws_msg = json.dumps({
                                 "type": "scope",
                                 "radio_id": self.radio_id,
                                 "div": 0x11,
-                                "span_hz": getattr(self, 'scope_span_hz', 50000),
+                                "span_hz": getattr(self, 'scope_span_hz', 100000),
                                 "center_mode": getattr(self, 'scope_mode_center', True),
                                 "edge_low": getattr(self, 'scope_edge_low', 0),
                                 "edge_high": getattr(self, 'scope_edge_high', 0),
-                                "data": full_row
+                                "data": processed_row
                             })
                             await broadcast_ws(ws_msg)
 
-        if state_changed and ws_clients:
+        if state_changed and ws_clients and not getattr(self, 'syncing', False):
             await broadcast_state(self.radio_id)
 
     async def _poll_loop(self):
@@ -859,7 +1420,6 @@ class RadioController:
                     await asyncio.sleep(0.08)
                     continue
 
-                # Jos radio ei ole vastannut > 6.0 sekuntiin, merkitään se rauhallisesti OFFLINE/STANDBY-tilaan
                 if self.state['online'] and (now - self.last_radio_reply > 6.0):
                     self.state['online'] = False
                     self.state['smeter'] = 'S0'
@@ -868,48 +1428,98 @@ class RadioController:
 
                 if self.ser and self.ser.is_open:
                     if not self.state['online']:
-                        # Radio on kiinni / virrat pois: kokeillaan kevyesti molempia Icom-osoitteita (0x94 ja 0xA2)
+                        # Kysellään aina sekä Icomia että Yaesua kun radio on offline-tilassa,
+                        # jotta radion tai COM-portin vaihto lennosta toimii välittömästi
                         if tick % 12 == 0:
-                            self.ser.write(civ_command(0x03, None, None, self.radio_addr))
+                            self.write_civ(civ_command(0x03, None, None, self.radio_addr))
                         elif tick % 12 == 6:
                             alt_addr = 0xA2 if self.radio_addr == 0x94 else 0x94
-                            self.ser.write(civ_command(0x03, None, None, alt_addr))
+                            self.write_civ(civ_command(0x03, None, None, alt_addr))
+                        if tick % 4 == 0:
+                            self.write_raw(b"ID;FA;MD0;")
+
+                        # Automaattinen baudinopeuden haku jos radio ei vastaa nykyisellä nopeudella (~1.8s välein)
+                        if tick >= 24 and tick % 16 == 0 and getattr(self, 'brand', 'auto') in ('yaesu', 'auto'):
+                            candidate_bauds = [19200, 38400, 9600, 4800, 115200]
+                            cur_b = self.ser.baudrate
+                            next_idx = (candidate_bauds.index(cur_b) + 1) % len(candidate_bauds) if cur_b in candidate_bauds else 0
+                            next_b = candidate_bauds[next_idx]
+                            try:
+                                self.ser.baudrate = next_b
+                                self.state['baud'] = next_b
+                                self.ser.reset_input_buffer()
+                                self.write_raw(b"ID;FA;")
+                            except Exception:
+                                pass
                     else:
-                        # Jos lähetys on päällä (PTT), pidetään CI-V-väylä täysin hiljaisena,
-                        # jotta USB-väylä ja radion DSP toimivat 100% häiriöttömästi modulointiaudiolla (FT8 tms.)
-                        if self.state.get('ptt') == 1:
-                            self.last_radio_reply = now
-                            self.last_scope_time = now
+                        if getattr(self, 'syncing', False):
+                            tick += 1
                             await asyncio.sleep(0.08)
                             continue
 
-                        # Jos radio on online, mutta emme ole saaneet yhtään scope-pakettia yli 2.0 sekuntiin:
-                        if now - self.last_scope_time > 2.0:
-                            self._enable_scope_hw()
-                            self.last_scope_time = now - 0.5
+                        if self.state.get('ptt') == 1:
+                            self.last_radio_reply = now
+                            self.last_scope_time = now
+                            # Tarkistetaan TX-tila myös lähetyksen aikana, jotta ulkoisen PTT:n (esim. SignaLink / WSJT-X)
+                            # vapautuminen havaitaan heti eikä PTT jää jumiin päälle!
+                            if tick % 3 == 0:
+                                if getattr(self, 'brand', 'icom') == 'yaesu':
+                                    self.write_raw(b"TX;")
+                                else:
+                                    self.write_civ(civ_command(0x1C, 0x00, None, self.radio_addr))
+                            tick += 1
+                            await asyncio.sleep(0.08)
+                            continue
 
-                        # Odotetaan muutama millisekunti jos vesiputouspyyhkäisy (div 1..10) on juuri kesken,
-                        # jotta pollaus lähtee siististi div 11 jälkeen eikä katkaise vesiputouspakettia!
-                        wait_guard = 0
-                        while time.monotonic() < getattr(self, 'scope_burst_until', 0.0) and wait_guard < 8:
-                            await asyncio.sleep(0.004)
-                            wait_guard += 1
-
-                        # Lähetetään vain YKSI kysely per sykli, jotta CI-V-väylä jää vapaaksi nopealle vesiputoukselle
-                        step = tick % 10
-                        if step == 0:
-                            self.ser.write(civ_command(0x03, None, None, self.radio_addr))
-                        elif step == 3:
-                            self.ser.write(civ_command(0x04, None, None, self.radio_addr))
-                        elif step == 6:
-                            self.ser.write(civ_command(0x14, 0x0A, None, self.radio_addr))
-                        elif step == 9:
-                            if self.radio_addr == 0xA2 and (tick // 10) % 2 == 1:
-                                self.ser.write(civ_command(0x16, 0x59, None, self.radio_addr))
-                            else:
-                                self.ser.write(civ_command(0x1A, 0x06, None, self.radio_addr))
+                        if getattr(self, 'brand', 'icom') == 'yaesu':
+                            step = tick % 10
+                            if step == 0:
+                                self.write_raw(b"FA;")
+                            elif step == 2:
+                                self.write_raw(b"MD0;EX1107;")
+                            elif step in (4, 8):
+                                self.write_raw(b"SM0;")
+                            elif step == 6:
+                                self.write_raw(b"TX;")
+                            elif step == 9:
+                                self.write_raw(b"PC;")
                         else:
-                            self.ser.write(civ_command(0x15, 0x02, None, self.radio_addr))
+                            # Icom polling
+                            if now - self.last_scope_time > 2.0:
+                                self._enable_scope_hw()
+                                self.last_scope_time = now - 0.5
+
+                            wait_guard = 0
+                            while time.monotonic() < getattr(self, 'scope_burst_until', 0.0) and wait_guard < 8:
+                                await asyncio.sleep(0.004)
+                                wait_guard += 1
+
+                            step = tick % 10
+                            if step == 0:
+                                self.write_civ(civ_command(0x03, None, None, self.radio_addr))
+                            elif step == 3:
+                                self.write_civ(civ_command(0x04, None, None, self.radio_addr))
+                            elif step == 6:
+                                self.write_civ(civ_command(0x14, 0x0A, None, self.radio_addr))
+                            elif step == 9:
+                                if self.radio_addr == 0xA2:
+                                    b_main = _ic9700_band(self.state.get('main_hz', 0))
+                                    b_sub = _ic9700_band(self.state.get('sub_hz', 0))
+                                    if b_main and b_main == b_sub and (now - getattr(self, 'last_dual_sync_time', 0.0) > 2.5):
+                                        self.last_dual_sync_time = now
+                                        asyncio.create_task(self._sync_ic9700_dual())
+                                    else:
+                                        sub_cycle = (tick // 10) % 3
+                                        if sub_cycle == 0:
+                                            self.write_civ(civ_command(0x07, 0xD2, None, self.radio_addr))
+                                        elif sub_cycle == 1:
+                                            self.write_civ(civ_command(0x16, 0x59, None, self.radio_addr))
+                                        else:
+                                            self.write_civ(civ_command(0x1A, 0x06, None, self.radio_addr))
+                                else:
+                                    self.write_civ(civ_command(0x1A, 0x06, None, self.radio_addr))
+                            else:
+                                self.write_civ(civ_command(0x15, 0x02, None, self.radio_addr))
                     tick += 1
             except asyncio.CancelledError:
                 break
@@ -919,44 +1529,60 @@ class RadioController:
 
     async def set_ptt(self, ptt_on: bool, is_cat: bool = False):
         tila = 1 if ptt_on else 0
-        if self.state['ptt'] == tila and not is_cat and (not self.ser or not self.ser.is_open):
-            return
-        self.state['ptt'] = tila
+        self.user_ptt = (tila == 1) and (not is_cat)
         self.cat_ptt = is_cat and (tila == 1)
+        if tila == 0:
+            self.ptt_release_until = time.monotonic() + 0.8
+        self.state['ptt'] = tila
+
+        # 1. Lähetetään PTT-komento radiolle VÄLITTÖMÄSTI (0 ms viiveellä ennen äänivirtojen sulkemista!),
+        # jotta radion T/R-rele päästää vastaanotolle samalla millisekunnilla kun PTT vapautetaan:
         if self.ser and self.ser.is_open and self.state['online']:
             try:
-                self.ser.write(civ_command(0x1C, 0x00, bytes([tila]), self.radio_addr))
-                if tila == 0:
-                    await asyncio.sleep(0.015)
-                    self.ser.write(civ_command(0x1C, 0x00, bytes([0x00]), self.radio_addr))
+                if getattr(self, 'brand', 'icom') == 'yaesu':
+                    self.write_raw(b"TX1;" if tila else b"TX0;")
+                else:
+                    self.write_civ(civ_command(0x1C, 0x00, bytes([tila]), self.radio_addr))
             except Exception:
                 pass
+
+        # 2. Käsitellään TX/RX-äänivirrat ilman että PortAudion sulkeminen blokkaa säiettä:
         if tila == 0:
             if self.radio_id in audio_manager.channels:
-                audio_manager.channels[self.radio_id]._stop_tx_stream()
-        elif not self.cat_ptt:
+                audio_manager.channels[self.radio_id]._stop_tx_stream(async_close=True)
+            if self.ser and self.ser.is_open and self.state['online'] and getattr(self, 'brand', 'icom') != 'yaesu':
+                await asyncio.sleep(0.012)
+                self.write_civ(civ_command(0x1C, 0x00, bytes([0x00]), self.radio_addr))
+        elif tila == 1 and not self.cat_ptt:
             if self.radio_id in audio_manager.channels:
                 audio_manager.channels[self.radio_id]._start_tx_stream()
         await broadcast_state(self.radio_id)
 
     def set_ptt_sync(self, ptt_val: int, is_cat: bool = False):
         tila = 1 if ptt_val else 0
-        if self.state['ptt'] == tila and not is_cat:
-            return
-        self.state['ptt'] = tila
+        self.user_ptt = (tila == 1) and (not is_cat)
         self.cat_ptt = is_cat and (tila == 1)
+        if tila == 0:
+            self.ptt_release_until = time.monotonic() + 0.8
+        self.state['ptt'] = tila
+
         if self.ser and self.ser.is_open and self.state.get('online'):
-            try:
-                self.ser.write(civ_command(0x1C, 0x00, bytes([tila]), self.radio_addr))
-                if tila == 0:
-                    time.sleep(0.015)
-                    self.ser.write(civ_command(0x1C, 0x00, bytes([0x00]), self.radio_addr))
-            except Exception:
-                pass
+            with self.ser_lock:
+                try:
+                    if getattr(self, 'brand', 'icom') == 'yaesu':
+                        self.ser.write(b"TX1;\r\n" if tila else b"TX0;\r\n")
+                    else:
+                        self.ser.write(civ_command(0x1C, 0x00, bytes([tila]), self.radio_addr))
+                        if tila == 0:
+                            time.sleep(0.010)
+                            self.ser.write(civ_command(0x1C, 0x00, bytes([0x00]), self.radio_addr))
+                except Exception:
+                    pass
+
         if tila == 0:
             if self.radio_id in audio_manager.channels:
-                audio_manager.channels[self.radio_id]._stop_tx_stream()
-        elif not self.cat_ptt:
+                audio_manager.channels[self.radio_id]._stop_tx_stream(async_close=True)
+        elif tila == 1 and not self.cat_ptt:
             if self.radio_id in audio_manager.channels:
                 audio_manager.channels[self.radio_id]._start_tx_stream()
         if app_loop and not app_loop.is_closed():
@@ -971,7 +1597,10 @@ class RadioController:
             self.state['main_hz'] = hz
         if self.ser and self.ser.is_open and self.state.get('online'):
             try:
-                self.ser.write(civ_command(0x05, None, hz_to_bcd(hz), to_addr=self.radio_addr))
+                if getattr(self, 'brand', 'icom') == 'yaesu':
+                    self.ser.write(f"FA{hz:09d};\r\n".encode('ascii'))
+                else:
+                    self.ser.write(civ_command(0x05, None, hz_to_bcd(hz), to_addr=self.radio_addr))
             except Exception:
                 pass
         if app_loop and not app_loop.is_closed():
@@ -989,22 +1618,124 @@ class RadioController:
             self.state['main_filter'] = filter_val
         if self.ser and self.ser.is_open and self.state.get('online'):
             try:
-                m_base = mode_str.split('-')[0].upper()
-                mode_map = {'LSB': 0x00, 'USB': 0x01, 'AM': 0x02, 'CW': 0x03, 'RTTY': 0x04, 'FM': 0x05, 'WFM': 0x06, 'CW-R': 0x07, 'RTTY-R': 0x08, 'DV': 0x17}
-                code = mode_map.get(m_base, 0x01)
-                self.ser.write(civ_command(0x06, None, bytes([code, filter_val]), to_addr=self.radio_addr))
-                if '-D' in mode_str:
-                    time.sleep(0.02)
-                    self.ser.write(civ_command(0x1A, 0x06, bytes([0x01, filter_val]), to_addr=self.radio_addr))
+                if getattr(self, 'brand', 'icom') == 'yaesu':
+                    if mode_str == "LSB":
+                        self.yaesu_ssb_bfo = '1'
+                    elif mode_str == "USB":
+                        self.yaesu_ssb_bfo = '0'
+                    y_map = {
+                        "LSB": "EX11071;MD01;EX11071;", "USB": "EX11070;MD02;EX11070;",
+                        "CW": "MD03;", "FM": "MD04;", "AM": "MD05;", "RTTY": "MD09;",
+                        "DATA-USB": "MD0C;", "USB-D": "MD0C;", "DATA-LSB": "MD08;", "LSB-D": "MD08;",
+                        "DATA-FM": "MD0A;", "FM-D": "MD0A;"
+                    }
+                    self.ser.write(f"{y_map.get(mode_str, 'EX11070;MD02;EX11070;')}\r\n".encode('ascii'))
+                else:
+                    m_base = mode_str.split('-')[0].upper()
+                    mode_map = {'LSB': 0x00, 'USB': 0x01, 'AM': 0x02, 'CW': 0x03, 'RTTY': 0x04, 'FM': 0x05, 'WFM': 0x06, 'CW-R': 0x07, 'RTTY-R': 0x08, 'DV': 0x17}
+                    code = mode_map.get(m_base, 0x01)
+                    self.ser.write(civ_command(0x06, None, bytes([code, filter_val]), to_addr=self.radio_addr))
+                    if '-D' in mode_str:
+                        time.sleep(0.02)
+                        self.ser.write(civ_command(0x1A, 0x06, bytes([0x01, filter_val]), to_addr=self.radio_addr))
             except Exception:
                 pass
         if app_loop and not app_loop.is_closed():
             asyncio.run_coroutine_threadsafe(broadcast_state(self.radio_id), app_loop)
 
+    async def apply_repeater_settings(self, dup=None, offset_mhz=None, tone_mode=None, ctcss=None):
+        """Asettaa VHF/UHF-toistinasetukset (DUP-/+, erotustaajuus, Tone/TSQL/1750Hz ja CTCSS-aliääni) radiolle."""
+        if dup is not None:
+            self.state['dup'] = str(dup).upper()
+        if offset_mhz is not None:
+            try:
+                self.state['offset_mhz'] = round(abs(float(offset_mhz)), 3)
+            except Exception:
+                pass
+        if tone_mode is not None:
+            self.state['tone_mode'] = str(tone_mode)
+        if ctcss is not None:
+            try:
+                self.state['ctcss'] = round(float(ctcss), 1)
+            except Exception:
+                pass
+
+        if not self.ser or not self.ser.is_open or not self.state.get('online') or getattr(self, 'brand', 'icom') == 'yaesu':
+            return
+
+        addr = self.radio_addr
+        try:
+            # 1. Duplex-suunta (0F: 10=Simplex/OFF, 11=DUP-, 12=DUP+)
+            if dup is not None:
+                d_str = self.state['dup']
+                d_sub = 0x11 if d_str == 'DUP-' else (0x12 if d_str == 'DUP+' else 0x10)
+                self.write_civ(civ_command(0x0F, d_sub, None, addr))
+                await asyncio.sleep(0.03)
+
+            # 2. Duplex-erotustaajuus (0D: 3 tavua BCD)
+            if offset_mhz is not None and self.state['offset_mhz'] > 0:
+                off_hz = int(round(self.state['offset_mhz'] * 1000000))
+                self.write_civ(civ_command(0x0D, None, offset_hz_to_bcd3(off_hz), addr))
+                await asyncio.sleep(0.03)
+
+            # 3. CTCSS-aliäänen taajuus (1B 00 = Repeater Tone, 1B 01 = TSQL)
+            if ctcss is not None or tone_mode in ('TONE', 'TSQL'):
+                c_bytes = ctcss_to_bcd3(self.state.get('ctcss', 123.0))
+                self.write_civ(civ_command(0x1B, 0x00, c_bytes, addr))
+                await asyncio.sleep(0.03)
+                if self.state.get('tone_mode') == 'TSQL':
+                    self.write_civ(civ_command(0x1B, 0x01, c_bytes, addr))
+                    await asyncio.sleep(0.03)
+
+            # 4. Tone-tila (16 42 = Repeater Tone, 16 43 = TSQL)
+            if tone_mode is not None:
+                tm = self.state.get('tone_mode', 'OFF')
+                if tm == 'TONE':
+                    self.write_civ(civ_command(0x16, 0x43, bytes([0x00]), addr))
+                    await asyncio.sleep(0.025)
+                    self.write_civ(civ_command(0x16, 0x42, bytes([0x01]), addr))
+                    await asyncio.sleep(0.025)
+                elif tm == 'TSQL':
+                    self.write_civ(civ_command(0x16, 0x42, bytes([0x00]), addr))
+                    await asyncio.sleep(0.025)
+                    self.write_civ(civ_command(0x16, 0x43, bytes([0x01]), addr))
+                    await asyncio.sleep(0.025)
+                else:
+                    # 'OFF' tai '1750Hz' (1750Hz lähetetään erillisellä TONE-avauspiippinapilla)
+                    self.write_civ(civ_command(0x16, 0x42, bytes([0x00]), addr))
+                    await asyncio.sleep(0.025)
+                    self.write_civ(civ_command(0x16, 0x43, bytes([0x00]), addr))
+                    await asyncio.sleep(0.025)
+        except Exception as e:
+            logging.debug(f"Radio {self.radio_id} apply_repeater_settings error: {e}")
+
+    async def set_tone_burst(self, active: bool, freq_hz: float = 1750.0):
+        """Lähettää 1750 Hz avauspiipin (Tone Burst) toistimelle kytkemällä PTT:n ja syöttämällä 1750 Hz siniaallon TX-audioon."""
+        ch = audio_manager.channels.get(self.radio_id) if 'audio_manager' in globals() else None
+        if active:
+            self.state['tone_burst'] = 1
+            if ch:
+                ch.tone_burst_freq = float(freq_hz or 1750.0)
+                ch.tone_burst_phase = 0.0
+                ch.tone_burst_active = True
+            # Varmistetaan IC-9700/IC-7300 DATA OFF MOD = MIC, USB (04), jotta sekä käsimikki että USB-ääni moduloivat FM/SSB-tilassa
+            if self.ser and self.ser.is_open and self.state.get('online') and getattr(self, 'brand', 'icom') != 'yaesu':
+                self.write_civ(civ_command(0x1A, 0x05, bytes([0x01, 0x15, 0x04]), self.radio_addr))
+                await asyncio.sleep(0.02)
+            await self.set_ptt(True)
+            if ch:
+                ch._start_tx_stream(force=True)
+        else:
+            self.state['tone_burst'] = 0
+            if ch:
+                ch.tone_burst_active = False
+            await self.set_ptt(False)
+
 
 radios = {
     "1": RadioController("1", default_addr=0x94),
-    "2": RadioController("2", default_addr=0xA2)
+    "2": RadioController("2", default_addr=0xA2),
+    "3": RadioController("3", default_addr=0x94)
 }
 
 ws_clients = set()
@@ -1055,6 +1786,7 @@ class RadioAudioChannel:
         self.rx_stream = None
         self.rx_stream_dev = None
         self.tx_stream = None
+        self.tx_lock = threading.Lock()
         self.ws_clients = set()
         self.tx_q = queue.Queue(maxsize=120)
         self.tx_buffer = np.array([], dtype=np.float32)
@@ -1062,6 +1794,10 @@ class RadioAudioChannel:
         self.spk_buffer = np.array([], dtype=np.float32)
         self.sample_rate = 16000
         self.rx_vol = 1.0
+        self.last_af_scope_time = 0.0
+        self.af_window = np.hanning(4096).astype(np.float32)
+        self.af_ring = np.zeros(4096, dtype=np.float32)
+        self.af_noise_db = -62.0
         rconf = global_config["radios"].get(self.radio_id, {})
         self.sql_pct = float(rconf.get("sql_pct", 0) or 0)
         self.sql_last_open = 0.0
@@ -1074,6 +1810,9 @@ class RadioAudioChannel:
         self.tx_dev = None
         self.spk_dev = None
         self.mic_dev = None
+        self.tone_burst_active = False
+        self.tone_burst_freq = 1750.0
+        self.tone_burst_phase = 0.0
 
     def set_volume(self, vol_pct: float):
         self.rx_vol = max(0.0, min(2.0, float(vol_pct) / 100.0))
@@ -1102,10 +1841,12 @@ class RadioAudioChannel:
 
     def feed_tx_samples(self, samples_f32: np.ndarray):
         r = radios.get(self.radio_id)
-        if r and r.state.get('ptt') == 1 and self.active:
+        # Syötetään mikrofonin ääntä VAIN kun käyttäjä itse pitää tämän ohjelman PTT:tä pohjassa (user_ptt=True).
+        # Huom! Älä koskaan avaa PortAudio-virtaa (_start_tx_stream) tästä C-tason audiocallback-säikeestä,
+        # sillä se aiheuttaa natiivin muistivirheen (kaatumisen) kun PTT:tä painellaan toistuvasti!
+        if r and getattr(r, 'user_ptt', False) and r.state.get('ptt') == 1 and self.active:
             if getattr(r, 'cat_ptt', False):
                 return
-            self._start_tx_stream()
             if not self.tx_q.full():
                 try:
                     self.tx_q.put_nowait(samples_f32.copy())
@@ -1142,23 +1883,22 @@ class RadioAudioChannel:
             else:
                 mono = indata[:, 0].copy()
 
-            # APRS demodulation
-            if 'aprs_engine' in globals() and aprs_engine and aprs_engine.rx_enabled and str(self.radio_id) == str(aprs_engine.radio_id):
-                try:
-                    aprs_engine.feed_audio(self.radio_id, mono)
-                except Exception:
-                    pass
-
             sql_open = self.is_squelch_open()
             gated_mono = mono if sql_open else np.zeros_like(mono)
 
-            # Tallennetaan vain ja ainoastaan tästä radiosta tuleva ääni (16-bit PCM)
-            if self.recording:
-                pcm16 = (np.clip(gated_mono * self.rx_vol, -1.0, 1.0) * 32767.0).astype(np.int16)
-                self.rec_chunks.append(pcm16.tobytes())
-
+            # 1. REITITETÄÄN RX-ÄÄNI KAIUTTIMILLE JA WEB-ASIAKKAILLE ENSIMMÄISENÄ (0 ms viiveellä ennen FFT/APRS-laskentaa!):
             if self.active:
-                # Lähetetään WebSocket-asiakkaille (mobiiliselain)
+                if self.local_active and self.spk_dev is not None and radios[self.radio_id].state.get('ptt') != 1:
+                    scaled = (gated_mono * self.rx_vol).astype(np.float32)
+                    if self.spk_q.full():
+                        try:
+                            self.spk_q.get_nowait()
+                        except Exception:
+                            pass
+                    try:
+                        self.spk_q.put_nowait(scaled)
+                    except Exception:
+                        pass
                 if self.ws_clients and app_loop and not app_loop.is_closed():
                     data_bytes = gated_mono.tobytes()
                     for ws in list(self.ws_clients):
@@ -1167,20 +1907,77 @@ class RadioAudioChannel:
                                 asyncio.run_coroutine_threadsafe(ws.send_bytes(data_bytes), app_loop)
                             except Exception:
                                 pass
-                # Puskuroidaan PC-kaiuttimille VAIN JOS local_active on päällä (työpöytäsovelluksen pyynnöstä)
-                if self.local_active and self.spk_dev is not None and radios[self.radio_id].state.get('ptt') != 1:
-                    scaled = (gated_mono * self.rx_vol).astype(np.float32)
-                    if not self.spk_q.full():
-                        try:
-                            self.spk_q.put_nowait(scaled)
-                        except Exception:
-                            pass
+
+            # 2. Tallennetaan vain ja ainoastaan tästä radiosta tuleva ääni (16-bit PCM)
+            if self.recording:
+                pcm16 = (np.clip(gated_mono * self.rx_vol, -1.0, 1.0) * 32767.0).astype(np.int16)
+                self.rec_chunks.append(pcm16.tobytes())
+
+            # 3. APRS demodulation
+            if 'aprs_engine' in globals() and aprs_engine and aprs_engine.rx_enabled and str(self.radio_id) == str(aprs_engine.radio_id):
+                try:
+                    aprs_engine.feed_audio(self.radio_id, mono)
+                except Exception:
+                    pass
+
+            # 4. Audio FFT Spectrum & Waterfall for radios without hardware scope (e.g. Yaesu FT-891)
+            r = radios.get(self.radio_id)
+            if r and (not getattr(r, 'has_hw_scope', True) or getattr(r, 'brand', '') == 'yaesu'):
+                try:
+                    n_s = len(mono)
+                    if n_s >= 4096:
+                        self.af_ring[:] = mono[-4096:]
+                    elif n_s > 0:
+                        self.af_ring[:-n_s] = self.af_ring[n_s:]
+                        self.af_ring[-n_s:] = mono
+                except Exception:
+                    pass
+
+                now_t = time.monotonic()
+                if (now_t - getattr(self, 'last_af_scope_time', 0.0)) >= 0.045:
+                    self.last_af_scope_time = now_t
+                    try:
+                        # 4096-pisteen Hanning-ikkunoitu ja normalisoitu FFT (resoluutio 3.9 Hz / bin, 0..3200 Hz = 820 biniä)
+                        windowed = (self.af_ring - np.mean(self.af_ring)) * self.af_window
+                        fft = np.abs(np.fft.rfft(windowed)) / 1024.0
+                        fft_sub = fft[:820]
+                        x_orig = np.linspace(0, 3200, len(fft_sub))
+                        x_new = np.linspace(0, 3200, 475)
+                        interp = np.interp(x_new, x_orig, fft_sub)
+                        db = 20.0 * np.log10(np.maximum(interp, 1e-7))
+
+                        # Adaptiivinen taustakohinatason seuranta SSB-päästökaistalta (250..3000 Hz = binit 35..445)
+                        passband_floor = float(np.percentile(db[35:445], 25))
+                        passband_floor = max(-92.0, min(-22.0, passband_floor))
+                        alpha = 0.25 if passband_floor < self.af_noise_db else 0.05
+                        self.af_noise_db = (1.0 - alpha) * self.af_noise_db + alpha * passband_floor
+
+                        snr_db = db - self.af_noise_db
+                        # Vaimennetaan <120 Hz DC/50Hz hurinapiikit (binit 0..18)
+                        snr_db[:18] *= np.linspace(0.0, 1.0, 18)
+
+                        # Skaalataan SNR (dB yli kohinatason) -> 0..160 (sama skaala kuin Icomin CI-V vesiputouksessa):
+                        scaled_fft = np.round(np.clip((snr_db - 1.5) * 2.3, 0.0, 160.0), 1).tolist()
+                        ws_msg = json.dumps({
+                            "type": "scope",
+                            "radio_id": self.radio_id,
+                            "div": 0x11,
+                            "span_hz": 3200,
+                            "center_mode": False,
+                            "edge_low": 0,
+                            "edge_high": 3200,
+                            "data": scaled_fft
+                        })
+                        if app_loop and not app_loop.is_closed():
+                            asyncio.run_coroutine_threadsafe(broadcast_ws(ws_msg), app_loop)
+                    except Exception:
+                        pass
 
         dev_info = sd.query_devices(self.rx_dev)
         in_ch = 2 if int(dev_info.get('max_input_channels', 1)) >= 2 else 1
         self.rx_stream = sd.InputStream(
             samplerate=self.sample_rate, channels=in_ch, dtype='float32',
-            device=self.rx_dev, callback=rx_callback, blocksize=1024
+            device=self.rx_dev, callback=rx_callback, blocksize=256, latency='low'
         )
         self.rx_stream.start()
         self.rx_stream_dev = self.rx_dev
@@ -1222,69 +2019,119 @@ class RadioAudioChannel:
             self.rx_stream_dev = None
         return pcm_bytes
 
-    def _start_tx_stream(self):
-        """Käynnistää TX-äänivirran vain kun PC:n tai webin mikrofoni lähettää puhetta."""
-        if self.tx_dev is None or not self.active:
-            return
-        r = radios.get(self.radio_id)
-        if r and getattr(r, 'cat_ptt', False):
-            return
-        if self.tx_stream is not None:
-            try:
-                if self.tx_stream.active:
-                    return
-            except Exception:
-                pass
-            self._stop_tx_stream()
-
-        while not self.tx_q.empty():
-            try: self.tx_q.get_nowait()
-            except Exception: break
-        # Alustetaan pienellä puskurityynyllä (1024 näytettä = 64 ms), jotta WiFi/mobiiliyhteyden jitter ei aiheuta pätkimistä
-        self.tx_buffer = np.zeros(1024, dtype=np.float32)
-
-        def tx_callback(outdata, frames, time_info, status):
-            while not self.tx_q.empty():
+    def _start_tx_stream(self, force: bool = False):
+        """Käynnistää TX-äänivirran vain kun PC:n tai webin mikrofoni lähettää puhetta (tai 1750 Hz Tone Burst lähetetään)."""
+        with self.tx_lock:
+            if self.tx_dev is None:
+                saved_tx = global_config["radios"].get(self.radio_id, {}).get("audio_tx_dev", "")
+                if str(saved_tx).strip() != "":
+                    try:
+                        self.tx_dev = int(saved_tx)
+                    except Exception:
+                        pass
+                if self.tx_dev is None and force:
+                    try:
+                        for idx, d in enumerate(sd.query_devices()):
+                            if int(d.get('max_output_channels', 0)) > 0 and 'usb audio codec' in d.get('name', '').lower():
+                                self.tx_dev = idx
+                                break
+                    except Exception:
+                        pass
+            if self.tx_dev is None or (not self.active and not force and not getattr(self, 'tone_burst_active', False)):
+                return
+            r = radios.get(self.radio_id)
+            if r and getattr(r, 'cat_ptt', False) and not force:
+                return
+            if self.tx_stream is not None:
                 try:
-                    self.tx_buffer = np.concatenate((self.tx_buffer, self.tx_q.get_nowait()))
+                    if self.tx_stream.active:
+                        return
                 except Exception:
-                    break
-            # Estetään puskurin liiallinen kasvu verkon yli tulevassa puheessa
-            if len(self.tx_buffer) > frames * 6:
-                self.tx_buffer = self.tx_buffer[-frames * 2:]
-            if len(self.tx_buffer) >= frames:
-                outdata[:, 0] = self.tx_buffer[:frames]
-                self.tx_buffer = self.tx_buffer[frames:]
-            elif len(self.tx_buffer) > 0:
-                l = len(self.tx_buffer)
-                outdata[:l, 0] = self.tx_buffer
-                outdata[l:, 0] = 0
-                self.tx_buffer = np.zeros(frames // 2, dtype=np.float32)
-            else:
-                outdata.fill(0)
+                    pass
+                try:
+                    self.tx_stream.stop()
+                    self.tx_stream.close()
+                except Exception:
+                    pass
+                self.tx_stream = None
 
-        try:
-            self.tx_stream = sd.OutputStream(
-                samplerate=self.sample_rate, channels=1, dtype='float32',
-                device=self.tx_dev, callback=tx_callback, blocksize=1024
-            )
-            self.tx_stream.start()
-        except Exception as e:
-            logging.error(f"Radio {self.radio_id} TX Stream start error: {e}")
+            while not self.tx_q.empty():
+                try: self.tx_q.get_nowait()
+                except Exception: break
+            # Matalan viiveen puskuri (256 näytettä = 16 ms)
+            self.tx_buffer = np.zeros(256, dtype=np.float32)
 
-    def _stop_tx_stream(self):
-        """Sulkee TX-äänivirran heti kun puhetta ei lähetetä, jotta radion USB-äänikortti pysyy vapaana WSJT-X:lle."""
-        if self.tx_stream:
+            def tx_callback(outdata, frames, time_info, status):
+                r_curr = radios.get(self.radio_id)
+                if r_curr and r_curr.state.get('ptt') != 1:
+                    outdata.fill(0)
+                    return
+                if getattr(self, 'tone_burst_active', False):
+                    freq = float(getattr(self, 'tone_burst_freq', 1750.0) or 1750.0)
+                    t = np.arange(frames, dtype=np.float32) / float(self.sample_rate)
+                    wave = (0.70 * np.sin(2.0 * np.pi * freq * t + self.tone_burst_phase)).astype(np.float32)
+                    self.tone_burst_phase = float((self.tone_burst_phase + 2.0 * np.pi * freq * frames / float(self.sample_rate)) % (2.0 * np.pi))
+                    outdata[:, 0] = wave
+                    return
+                while not self.tx_q.empty():
+                    try:
+                        self.tx_buffer = np.concatenate((self.tx_buffer, self.tx_q.get_nowait()))
+                    except Exception:
+                        break
+                # Estetään puskurin liiallinen kasvu
+                if len(self.tx_buffer) > frames * 4:
+                    self.tx_buffer = self.tx_buffer[-frames * 2:]
+                if len(self.tx_buffer) >= frames:
+                    outdata[:, 0] = self.tx_buffer[:frames]
+                    self.tx_buffer = self.tx_buffer[frames:]
+                elif len(self.tx_buffer) > 0:
+                    l = len(self.tx_buffer)
+                    outdata[:l, 0] = self.tx_buffer
+                    outdata[l:, 0] = 0
+                    self.tx_buffer = np.array([], dtype=np.float32)
+                else:
+                    outdata.fill(0)
+
             try:
-                self.tx_stream.stop()
-                self.tx_stream.close()
-            except Exception:
-                pass
-            self.tx_stream = None
+                self.tx_stream = sd.OutputStream(
+                    samplerate=self.sample_rate, channels=1, dtype='float32',
+                    device=self.tx_dev, callback=tx_callback, blocksize=256, latency='low'
+                )
+                self.tx_stream.start()
+            except Exception as e:
+                logging.error(f"Radio {self.radio_id} TX Stream start error: {e}")
+
+    def _stop_tx_stream(self, async_close: bool = False):
+        """Sulkee TX-äänivirran välittömästi ilman että Windowsin ääniajuri viivästyttää RX-äänen palautumista."""
         while not self.tx_q.empty():
             try: self.tx_q.get_nowait()
             except Exception: break
         self.tx_buffer = np.array([], dtype=np.float32)
+        # Tyhjennetään myös kaiutinpuskuri vanhasta hiljaisuudesta, jotta tuore RX-ääni kuuluu heti ensimmäisestä 16 ms blokista!
+        while not self.spk_q.empty():
+            try: self.spk_q.get_nowait()
+            except Exception: break
+        self.spk_buffer = np.array([], dtype=np.float32)
+
+        def _close_now():
+            with self.tx_lock:
+                st = self.tx_stream
+                self.tx_stream = None
+                if st is not None:
+                    try:
+                        st.abort()
+                    except Exception:
+                        try: st.stop()
+                        except Exception: pass
+                    try:
+                        st.close()
+                    except Exception:
+                        pass
+
+        if async_close:
+            threading.Thread(target=_close_now, daemon=True).start()
+        else:
+            _close_now()
 
     def start(self, rx_id=None, tx_id=None, spk_id=None, mic_id=None, vol_pct=100, local=True):
         if local:
@@ -1306,6 +2153,27 @@ class RadioAudioChannel:
         self.spk_dev = int(spk_id) if (spk_id is not None and str(spk_id).strip() != "") else None
         self.mic_dev = int(mic_id) if (mic_id is not None and str(mic_id).strip() != "") else None
 
+        # Estetään vahingossa ristiin valitut Radio TX Output ja PC Speaker -laitteet:
+        # Jos PC Speaker (spk_dev) osoittaa samaan radion USB-äänikorttiin kuin Radio RX Input (esim. SignaLink),
+        # radion oma RX-kohina syötettäisiin suoraan takaisin SignaLinkiin, mikä laukaisee SignaLinkin VOX-PTT:n jatkuvasti päälle!
+        if self.rx_dev is not None and self.spk_dev is not None:
+            try:
+                rx_name = sd.query_devices(self.rx_dev).get('name', '').strip().lower()
+                spk_name = sd.query_devices(self.spk_dev).get('name', '').strip().lower()
+                tx_name = sd.query_devices(self.tx_dev).get('name', '').strip().lower() if self.tx_dev is not None else ''
+                rx_codec = rx_name.split('(')[-1].strip(' )') if '(' in rx_name else rx_name
+                spk_codec = spk_name.split('(')[-1].strip(' )') if '(' in spk_name else spk_name
+                tx_codec = tx_name.split('(')[-1].strip(' )') if '(' in tx_name else tx_name
+                if rx_codec and spk_codec and (rx_name == spk_name or (len(rx_codec) >= 5 and rx_codec == spk_codec)):
+                    if self.tx_dev is not None and tx_codec != rx_codec:
+                        logging.warning(f"[Audio] Radio {self.radio_id}: Swapped TX ({self.tx_dev}) and Speaker ({self.spk_dev}) to prevent SignaLink VOX loopback!")
+                        self.tx_dev, self.spk_dev = self.spk_dev, self.tx_dev
+                    else:
+                        logging.warning(f"[Audio] Radio {self.radio_id}: Disabled Speaker ({self.spk_dev}) because it matches Radio RX codec ({rx_name}) and would cause VOX loopback!")
+                        self.spk_dev = None
+            except Exception:
+                pass
+
         # Alustetaan radion oma kaiutinpuskuri pienellä 1 blokin (64 ms) puskurityynyllä,
         # jotta kahden eri USB-äänikortin kellovaihe-ero ei aiheuta pätkimistä.
         while not self.spk_q.empty():
@@ -1313,7 +2181,7 @@ class RadioAudioChannel:
                 self.spk_q.get_nowait()
             except Exception:
                 break
-        self.spk_buffer = np.zeros(1024, dtype=np.float32)
+        self.spk_buffer = np.zeros(256, dtype=np.float32)
 
         if local:
             rconf["audio_rx_dev"] = "" if self.rx_dev is None else str(self.rx_dev)
@@ -1370,7 +2238,8 @@ class DualAudioManager:
     def __init__(self):
         self.channels = {
             "1": RadioAudioChannel("1"),
-            "2": RadioAudioChannel("2")
+            "2": RadioAudioChannel("2"),
+            "3": RadioAudioChannel("3")
         }
         self.shared_mics = {}      # dev_id -> sd.InputStream
         self.shared_speakers = {}  # dev_id -> sd.OutputStream
@@ -1410,7 +2279,7 @@ class DualAudioManager:
                 try:
                     st = sd.InputStream(
                         samplerate=self.sample_rate, channels=1, dtype='float32',
-                        device=dev_id, callback=make_mic_cb(dev_id), blocksize=1024
+                        device=dev_id, callback=make_mic_cb(dev_id), blocksize=256, latency='low'
                     )
                     st.start()
                     self.shared_mics[dev_id] = st
@@ -1437,14 +2306,20 @@ class DualAudioManager:
                         for ch in self.channels.values():
                             if not ch.active or ch.spk_dev != d_id:
                                 continue
+                            if radios[ch.radio_id].state.get('ptt') == 1:
+                                while not ch.spk_q.empty():
+                                    try: ch.spk_q.get_nowait()
+                                    except Exception: break
+                                ch.spk_buffer = np.array([], dtype=np.float32)
+                                continue
                             while not ch.spk_q.empty():
                                 try:
                                     chunk = ch.spk_q.get_nowait()
                                     ch.spk_buffer = np.concatenate((ch.spk_buffer, chunk))
                                 except Exception:
                                     break
-                            # Estetään puskurin liiallinen kasvu kelloryöminnän aikana
-                            if len(ch.spk_buffer) > frames * 6:
+                            # Pidetään kaiutinpuskuri tiukkana (max ~32-48 ms), jotta RX-ääni kuuluu välittömästi PTT:n vapautuessa!
+                            if len(ch.spk_buffer) > frames * 3:
                                 ch.spk_buffer = ch.spk_buffer[-frames * 2:]
                             if len(ch.spk_buffer) >= frames:
                                 mix += ch.spk_buffer[:frames]
@@ -1453,8 +2328,7 @@ class DualAudioManager:
                             elif len(ch.spk_buffer) > 0:
                                 l = len(ch.spk_buffer)
                                 mix[:l] += ch.spk_buffer
-                                # Lisätään pieni 32 ms tyyny, jotta USB- ja PC-äänikortin kellovaihe ei napsu
-                                ch.spk_buffer = np.zeros(frames // 2, dtype=np.float32)
+                                ch.spk_buffer = np.array([], dtype=np.float32)
                                 any_audio = True
                         if any_audio:
                             outdata[:, 0] = np.clip(mix, -1.0, 1.0)
@@ -1465,7 +2339,7 @@ class DualAudioManager:
                 try:
                     st = sd.OutputStream(
                         samplerate=self.sample_rate, channels=1, dtype='float32',
-                        device=dev_id, callback=make_spk_cb(dev_id), blocksize=1024
+                        device=dev_id, callback=make_spk_cb(dev_id), blocksize=256, latency='low'
                     )
                     st.start()
                     self.shared_speakers[dev_id] = st
@@ -1484,18 +2358,75 @@ audio_manager = DualAudioManager()
 aprs_engine = aprs_modem.AprsEngine(stations_file=os.path.join(BASE_DIR, "aprs_stations.json"))
 aprs_engine.configure(global_config.get("aprs", {}))
 
+def resolve_wasapi_output_device(dev_idx: int) -> int:
+    """Finds the lower-latency Windows WASAPI output device corresponding to the configured index."""
+    try:
+        dev_info = sd.query_devices(dev_idx)
+        hostapi = sd.query_hostapis(dev_info['hostapi'])
+        if hostapi['name'] == 'Windows WASAPI':
+            return dev_idx
+        target_name = dev_info['name'].lower()
+        keywords = [part.strip() for part in target_name.replace('(', ' ').replace(')', ' ').split() if len(part.strip()) > 3]
+        for idx, d in enumerate(sd.query_devices()):
+            if d['max_output_channels'] > 0:
+                h = sd.query_hostapis(d['hostapi'])
+                if h['name'] == 'Windows WASAPI':
+                    dname = d['name'].lower()
+                    if (keywords and all(k in dname for k in keywords)) or (('icom' in target_name or '9700' in target_name) and ('icom' in dname or '9700' in dname)):
+                        logging.info(f"[Audio] Resolved dev {dev_idx} ({dev_info['name']}) -> WASAPI dev {idx} ({d['name']})")
+                        return idx
+    except Exception as e:
+        logging.warning(f"[Audio] Could not resolve WASAPI device: {e}")
+    return dev_idx
+
+
 def aprs_tx_audio_handler(radio_id: str, audio_samples: np.ndarray):
     r = radios.get(str(radio_id))
     if not r or not r.state.get('online', False):
         logging.warning(f"APRS TX skipped: radio {radio_id} not online")
         return
     
-    # Carrier sense: if S-meter is active (> 25%), backoff up to 2.5 seconds
+    # Check Frequency Safety Lock: block transmission if VFO is tuned away from 144.800 MHz FM
+    aprs_cfg = global_config.get("aprs", {})
+    freq_lock_enabled = aprs_cfg.get("freq_lock_enabled", True)
+    target_hz = int(aprs_cfg.get("aprs_freq_hz", 144800000))
+    
+    curr_band = getattr(r, 'current_band', 0)
+    if curr_band == 1:
+        curr_hz = int(r.state.get('sub_hz') or r.state.get('taajuus_hz') or 0)
+        curr_mode = str(r.state.get('sub_mode') or r.state.get('mode') or 'FM')
+    else:
+        curr_hz = int(r.state.get('main_hz') or r.state.get('taajuus_hz') or 0)
+        curr_mode = str(r.state.get('main_mode') or r.state.get('mode') or 'FM')
+
+    if freq_lock_enabled and curr_hz > 0:
+        is_freq_match = abs(curr_hz - target_hz) <= 500
+        is_mode_match = curr_mode.upper().startswith("FM")
+        if not (is_freq_match and is_mode_match):
+            reason = f"Radio {radio_id} VFO is on {curr_hz/1e6:.4f} MHz {curr_mode} (Lock requires {target_hz/1e6:.3f} MHz FM)"
+            logging.warning(f"[APRS TX SAFETY LOCK] BLOCKED: {reason}! TX aborted.")
+            if ws_clients and app_loop and not app_loop.is_closed():
+                msg = json.dumps({
+                    "type": "aprs_tx_blocked",
+                    "reason": reason,
+                    "curr_hz": curr_hz,
+                    "curr_mode": curr_mode,
+                    "target_hz": target_hz
+                })
+                for ws in list(ws_clients):
+                    if not ws.closed:
+                        try:
+                            asyncio.run_coroutine_threadsafe(ws.send_str(msg), app_loop)
+                        except Exception:
+                            pass
+            return
+
+    # Brief carrier sense check (max 0.25s) only if channel is heavily active (> 60%)
     wait_start = time.monotonic()
-    while (time.monotonic() - wait_start) < 2.5:
-        if float(r.state.get('smeter_pct', 0)) < 25.0:
+    while (time.monotonic() - wait_start) < 0.25:
+        if float(r.state.get('smeter_pct', 0)) < 60.0:
             break
-        time.sleep(0.1)
+        time.sleep(0.05)
 
     rconf = global_config.get("radios", {}).get(str(radio_id), {})
     tx_dev = rconf.get("audio_tx_dev")
@@ -1509,15 +2440,37 @@ def aprs_tx_audio_handler(radio_id: str, audio_samples: np.ndarray):
         logging.warning(f"APRS TX skipped: invalid audio_tx_dev '{tx_dev}'")
         return
 
+    effective_tx_dev = resolve_wasapi_output_device(tx_dev_int)
+
     try:
-        r.set_ptt_sync(1)
-        time.sleep(0.04)
-        sd.play(audio_samples, samplerate=16000, device=tx_dev_int, blocking=True)
-        time.sleep(0.02)
+        # Guarantee radio mod source is USB before transmitting using thread-safe write_civ
+        if r.ser and r.ser.is_open:
+            try:
+                addr = getattr(r, 'radio_addr', 0xA2)
+                # 1A 05 01 15 03 = DATA OFF MOD -> USB
+                r.write_civ(civ_command(0x1A, 0x05, bytes([0x01, 0x15, 0x03]), to_addr=addr))
+                time.sleep(0.015)
+                # 1A 05 01 16 03 = DATA1 MOD -> USB
+                r.write_civ(civ_command(0x1A, 0x05, bytes([0x01, 0x16, 0x03]), to_addr=addr))
+                time.sleep(0.015)
+            except Exception as e:
+                logging.warning(f"[APRS TX] Error setting mod input: {e}")
+
+        # Ensure audio_samples is float32 1D mono (matching wfweb mono WASAPI stream)
+        if audio_samples.ndim > 1:
+            audio_samples = audio_samples[:, 0]
+        audio_samples = np.ascontiguousarray(audio_samples, dtype=np.float32)
+
+        logging.info(f"[APRS TX] Keying PTT (is_cat=True) on radio {radio_id} (samples={len(audio_samples)}, sr=48000, dev={effective_tx_dev})")
+        r.set_ptt_sync(1, is_cat=True)
+        time.sleep(0.08)  # Allow relay and transmitter PA to settle before audio tones start
+        sd.play(audio_samples, samplerate=48000, device=effective_tx_dev, blocking=True)
+        time.sleep(0.15)  # Flush DAC buffer completely before dropping carrier to protect FCS CRC tail
     except Exception as e:
         logging.error(f"APRS TX error playing audio: {e}")
     finally:
-        r.set_ptt_sync(0)
+        r.set_ptt_sync(0, is_cat=True)
+        logging.info(f"[APRS TX] Unkeyed PTT on radio {radio_id}")
 
 def aprs_on_packet(pkt: dict):
     if ws_clients and app_loop and not app_loop.is_closed():
@@ -1768,15 +2721,46 @@ class VirtualComBridge:
 
 rigctld_servers = {
     "1": RigctldServer("1", 4532),
-    "2": RigctldServer("2", 4533)
+    "2": RigctldServer("2", 4533),
+    "3": RigctldServer("3", 4534)
 }
 
 
+keybind_listening_radio = None
+
+
 async def global_ptt_monitor_loop():
-    """Tarkkailee Win32 GetAsyncKeyState-rajapinnalla määritettyjä PTT-näppäimiä."""
+    """Tarkkailee Win32 GetAsyncKeyState-rajapinnalla määritettyjä PTT-näppäimiä ja hiiren sivunappeja."""
+    global keybind_listening_radio
+    MOUSE_VK_NAMES = {
+        0x05: "Mouse4",
+        0x06: "Mouse5",
+        0x04: "MouseMid"
+    }
     while True:
         try:
             win_active = is_desktop_window_active()
+
+            # Jos käyttäjä on painanut "PTT Key" -nappia, napataan hiiren sivunapit (XButton1 / XButton2 / Middle)
+            # suoraan Windowsin kernel-tasolta, vaikka WebView2 nielisi selaintapahtuman!
+            if keybind_listening_radio and win_active:
+                listen_rid = str(keybind_listening_radio)
+                for m_vk, m_name in MOUSE_VK_NAMES.items():
+                    if bool(_user32.GetAsyncKeyState(m_vk) & 0x8000):
+                        keybind_listening_radio = None
+                        if listen_rid in global_config.get("radios", {}):
+                            global_config["radios"][listen_rid]["ptt_key_code"] = m_vk
+                            global_config["radios"][listen_rid]["ptt_key_name"] = m_name
+                            save_config(global_config)
+                        await broadcast_ws(json.dumps({
+                            "type": "keybind_captured",
+                            "radio_id": listen_rid,
+                            "code": m_vk,
+                            "name": m_name
+                        }))
+                        await asyncio.sleep(0.25)
+                        break
+
             for rid, r in radios.items():
                 rconf = global_config["radios"].get(rid, {})
                 vk = int(rconf.get("ptt_key_code", 0) or 0)
@@ -1802,7 +2786,7 @@ async def global_ptt_monitor_loop():
                         await r.set_ptt(False)
         except Exception as e:
             logging.debug(f"Global PTT monitor error: {e}")
-        await asyncio.sleep(0.015)
+        await asyncio.sleep(0.005)
 
 
 def get_resource_path(relative_path):
@@ -1915,8 +2899,11 @@ async def api_config_update(request):
         global_config.setdefault("aprs", {}).update(data["aprs"])
         aprs_engine.configure(global_config["aprs"])
         changed = True
+    if "active_radios" in data and isinstance(data["active_radios"], list):
+        global_config["active_radios"] = [str(x) for x in data["active_radios"] if str(x) in ("1", "2", "3")]
+        changed = True
     if rid in global_config["radios"]:
-        for key in ("port", "baud", "vfo_offset", "ptt_key_code", "ptt_key_name", "ptt_global",
+        for key in ("port", "baud", "brand", "vfo_offset", "ptt_key_code", "ptt_key_name", "ptt_global",
                     "audio_rx_dev", "audio_tx_dev", "audio_spk_dev", "audio_mic_dev", "audio_rx_vol",
                     "wf_floor", "wf_gain", "wf_peak", "wf_speed", "wf_mode"):
             if key in data:
@@ -1929,6 +2916,7 @@ async def api_config_update(request):
 
 async def api_shutdown(request):
     try:
+        aprs_engine.stop()
         for r in radios.values():
             r.disconnect_sync()
         audio_manager.stop_all()
@@ -1979,7 +2967,7 @@ async def api_audio_start(request):
     local = bool(data.get('local', True if ('spk' in data or 'mic' in data) else False))
     try:
         audio_manager.channels[rid].start(rx_id, tx_id, spk_id, mic_id, vol, local=local)
-        return web.json_response({"status": "ok", "active": True})
+        return web.json_response({"status": "ok", "active": True, "config": global_config["radios"].get(rid, {})})
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
 
@@ -2090,45 +3078,201 @@ async def api_cmd(request):
         return web.json_response({"status": "offline"})
 
     try:
+        if getattr(radio, 'brand', 'icom') == 'yaesu':
+            # Yaesu FT-891:ssa pelkkä MD01;/MD02; ei vaihda sivukaistaa jos valikko 11-07 [SSB BFO]
+            # on lukittu LSB/USB-tilaan tai AUTO-tilassa (<10 MHz pakottaa LSB).
+            # EX11071;MD01;EX11071; pakottaa sekä SSB BFO:n että moden LSB:lle,
+            # ja EX11070;MD02;EX11070; pakottaa sekä SSB BFO:n että moden USB:lle!
+            y_map = {
+                "LSB": "EX11071;MD01;EX11071;", "USB": "EX11070;MD02;EX11070;", "CW": "MD03;", "FM": "MD04;",
+                "AM": "MD05;", "RTTY": "MD09;", "DATA-USB": "MD0C;", "USB-D": "MD0C;",
+                "DATA-LSB": "MD08;", "LSB-D": "MD08;", "DATA-FM": "MD0A;", "FM-D": "MD0A;"
+            }
+            if cmd_type == 'taajuus':
+                hz = int(data['hz'])
+                # Jos mukana tulee myös mode (esim. Bookmarkista), asetetaan Yaesulle AINA ensin MODE (MD0x;)
+                # ja vasta sen jälkeen TAAJUUS (FA00xxxxxxx;). Jos taajuus asetetaan ennen modea (esim. AM -> LSB),
+                # Yaesu FT-891 siirtää taajuutta +0.7 kHz (BFO-offset) moden vaihtuessa!
+                if data.get('mode'):
+                    mode_str = str(data['mode']).upper()
+                    if mode_str == 'LSB':
+                        radio.yaesu_ssb_bfo = '1'
+                    elif mode_str == 'USB':
+                        radio.yaesu_ssb_bfo = '0'
+                    radio.state['mode'] = mode_str
+                    radio.state['main_mode'] = mode_str
+                    radio.state['data_on'] = mode_str.endswith('-D')
+                    radio.write_raw(f"{y_map.get(mode_str, 'EX11070;MD02;EX11070;')}".encode('ascii'))
+                    await asyncio.sleep(0.045)
+                radio.state['taajuus_hz'] = hz
+                radio.state['taajuus_mhz'] = f"{(hz / 1000000):.6f}"
+                radio.state['main_hz'] = hz
+                radio.write_raw(f"FA{hz:09d};".encode('ascii'))
+                if data.get('mode'):
+                    await asyncio.sleep(0.035)
+                    radio.write_raw(f"FA{hz:09d};".encode('ascii'))
+                await broadcast_state(rid)
+            elif cmd_type == 'mode':
+                mode_str = data['mode'].upper()
+                if mode_str == 'LSB':
+                    radio.yaesu_ssb_bfo = '1'
+                elif mode_str == 'USB':
+                    radio.yaesu_ssb_bfo = '0'
+                radio.state['mode'] = mode_str
+                radio.state['main_mode'] = mode_str
+                radio.state['data_on'] = mode_str.endswith('-D')
+                radio.write_raw(f"{y_map.get(mode_str, 'EX11070;MD02;EX11070;')}".encode('ascii'))
+                await broadcast_state(rid)
+            elif cmd_type == 'ptt':
+                tila = int(data['ptt'])
+                await radio.set_ptt(tila == 1)
+            elif cmd_type == 'atu':
+                radio.write_raw(b"AC002;")
+            elif cmd_type == 'teho':
+                teho_f = float(data['teho'])
+                radio.last_power_set_time = time.monotonic()
+                w = max(5, min(100, int(round(teho_f * 100))))
+                radio.state['power_pct'] = w
+                radio.write_raw(f"PC{w:03d};".encode('ascii'))
+                await broadcast_state(rid)
+            return web.json_response({"status": "ok"})
+
         addr = radio.radio_addr
         if cmd_type == 'taajuus':
             hz = int(data['hz'])
             target_vfo = data.get('vfo')  # 'main', 'sub' tai None
-            if addr == 0xA2 and target_vfo in ('main', 'sub'):
-                want_band = 1 if target_vfo == 'sub' else 0
-                if want_band == 1 and radio.state.get('dual_rx', 0) == 0:
-                    radio.state['dual_rx'] = 1
-                    radio.ser.write(civ_command(0x16, 0x59, bytes([0x01]), addr))
+            radio.tune_guard_until = time.monotonic() + 0.90
+            radio.syncing = True
+            try:
+                need_select_main = False
+                need_swap_ms = False
+                need_dual_on = False
+                need_select_vfo = None
+
+                if addr == 0xA2 and data.get('swap_if_band_diff'):
+                    # Kirjanmerkistä hypättäessä käytetään aina MAIN VFO:ta, ja jos uusi taajuus on eri bandilla
+                    # kuin nykyinen MAIN VFO (esim. MAIN=VHF 2m ja bookmark=UHF 70cm), painetaan ensin Swap M/S (07 B0),
+                    # jolloin vanha MAIN VFO siirtyy SUB VFO:ksi ja MAIN VFO vaihtuu uudelle bandille!
+                    if radio.current_band == 1:
+                        need_select_main = True
+                        radio.current_band = 0
+                        radio.state['active_band'] = 0
+                    cur_main_hz = radio.state.get('main_hz', 0)
+                    cur_main_band = _ic9700_band(cur_main_hz)
+                    new_band = _ic9700_band(hz)
+                    if cur_main_band and new_band and cur_main_band != new_band:
+                        need_swap_ms = True
+                        radio.state['sub_hz'] = cur_main_hz
+                        radio.state['sub_mode'] = radio.state.get('main_mode', 'FM')
+                        radio.state['sub_filter'] = radio.state.get('main_filter', 1)
+                elif addr == 0xA2 and target_vfo in ('main', 'sub'):
+                    want_band = 1 if target_vfo == 'sub' else 0
+                    if want_band == 1 and radio.state.get('dual_rx', 0) == 0:
+                        need_dual_on = True
+                        radio.state['dual_rx'] = 1
+                    if radio.current_band != want_band:
+                        need_select_vfo = want_band
+                        radio.current_band = want_band
+                        radio.state['active_band'] = want_band
+
+                if radio.current_band == 1:
+                    old_sub = radio.state.get('sub_hz', 433500000)
+                    if addr == 0xA2 and _ic9700_band(hz) and _ic9700_band(hz) == _ic9700_band(radio.state.get('main_hz', 0)):
+                        if _ic9700_band(old_sub) and _ic9700_band(old_sub) != _ic9700_band(hz):
+                            radio.state['main_hz'] = old_sub
+                    radio.state['sub_hz'] = hz
+                else:
+                    old_main = radio.state.get('main_hz', 145500000)
+                    if addr == 0xA2 and not need_swap_ms and _ic9700_band(hz) and _ic9700_band(hz) == _ic9700_band(radio.state.get('sub_hz', 0)):
+                        if _ic9700_band(old_main) and _ic9700_band(old_main) != _ic9700_band(hz):
+                            radio.state['sub_hz'] = old_main
+                    radio.state['main_hz'] = hz
+
+                radio.state['taajuus_hz'] = hz
+                radio.state['taajuus_mhz'] = f"{(hz / 1000000):.6f}"
+
+                mode_cmd_bytes = None
+                data_cmd_bytes = None
+                if data.get('mode'):
+                    mode_str = str(data['mode']).upper()
+                    fil_nro = int(data.get('filter', radio.state.get('filter', 1)))
+                    base_mode = mode_str.split('-')[0]
+                    is_data = 0x01 if ("-D" in mode_str or "-U" in mode_str) else 0x00
+                    radio.state['data_on'] = (is_data == 0x01)
+                    radio.state['mode'] = mode_str
+                    if radio.current_band == 1:
+                        radio.state['sub_mode'] = mode_str
+                    else:
+                        radio.state['main_mode'] = mode_str
+                    m_map = {
+                        "LSB": 0x00, "USB": 0x01, "AM": 0x02,
+                        "CW": 0x03, "RTTY": 0x04, "FM": 0x05, "DV": 0x17
+                    }
+                    mode_byte = m_map.get(base_mode, 0x01)
+                    mode_cmd_bytes = civ_command(0x06, mode_byte, bytes([fil_nro]), addr)
+                    if base_mode in ("LSB", "USB", "FM"):
+                        data_cmd_bytes = civ_command(0x1A, 0x06, bytes([is_data, fil_nro]), addr)
+
+                if any(k in data for k in ('dup', 'offset_mhz', 'tone_mode', 'ctcss')):
+                    if data.get('dup') is not None:
+                        radio.state['dup'] = str(data['dup']).upper()
+                    if data.get('offset_mhz') is not None:
+                        radio.state['offset_mhz'] = round(float(data['offset_mhz']), 3)
+                    if data.get('tone_mode') is not None:
+                        radio.state['tone_mode'] = str(data['tone_mode'])
+                    if data.get('ctcss') is not None:
+                        radio.state['ctcss'] = round(float(data['ctcss']), 1)
+
+                # Lähetetään nyt CI-V-komennot radiolle oikeassa järjestyksessä:
+                if need_select_main:
+                    radio.write_civ(civ_command(0x07, 0xD0, None, addr))
+                    await asyncio.sleep(0.045)
+                if need_swap_ms:
+                    radio.write_civ(civ_command(0x07, 0xB0, None, addr))
+                    await asyncio.sleep(0.055)
+                if need_dual_on:
+                    radio.write_civ(civ_command(0x16, 0x59, bytes([0x01]), addr))
                     await asyncio.sleep(0.04)
-                if radio.current_band != want_band:
-                    radio.current_band = want_band
-                    radio.state['active_band'] = want_band
-                    radio.ser.write(civ_command(0x07, 0xD1 if want_band == 1 else 0xD0, None, addr))
+                if need_select_vfo is not None:
+                    radio.write_civ(civ_command(0x07, 0xD1 if need_select_vfo == 1 else 0xD0, None, addr))
                     await asyncio.sleep(0.04)
-            radio.state['taajuus_hz'] = hz
-            radio.state['taajuus_mhz'] = f"{(hz / 1000000):.6f}"
-            if radio.current_band == 1:
-                radio.state['sub_hz'] = hz
-            else:
-                radio.state['main_hz'] = hz
-            radio.ser.write(civ_command(0x05, None, hz_to_bcd(hz), addr))
+
+                # Asetetaan taajuus (0x05) heti bandin vaihdon jälkeen:
+                radio.write_civ(civ_command(0x05, None, hz_to_bcd(hz), addr))
+                if mode_cmd_bytes is not None:
+                    await asyncio.sleep(0.035)
+                    radio.write_civ(mode_cmd_bytes)
+                if data_cmd_bytes is not None:
+                    await asyncio.sleep(0.035)
+                    radio.write_civ(data_cmd_bytes)
+                if any(k in data for k in ('dup', 'offset_mhz', 'tone_mode', 'ctcss')):
+                    await asyncio.sleep(0.035)
+                    await radio.apply_repeater_settings(
+                        dup=data.get('dup'),
+                        offset_mhz=data.get('offset_mhz'),
+                        tone_mode=data.get('tone_mode'),
+                        ctcss=data.get('ctcss')
+                    )
+            finally:
+                radio.tune_guard_until = time.monotonic() + 0.45
+                radio.syncing = False
             await broadcast_state(rid)
 
         elif cmd_type == 'select_band':
             want_band = 1 if str(data.get('band', '0')).lower() in ('1', 'sub') else 0
             if want_band == 1 and radio.state.get('dual_rx', 0) == 0:
                 radio.state['dual_rx'] = 1
-                radio.ser.write(civ_command(0x16, 0x59, bytes([0x01]), addr))
+                radio.write_civ(civ_command(0x16, 0x59, bytes([0x01]), addr))
                 await asyncio.sleep(0.04)
+            radio.write_civ(civ_command(0x07, 0xD1 if want_band == 1 else 0xD0, None, addr))
+            await asyncio.sleep(0.05)
             radio.current_band = want_band
             radio.state['active_band'] = want_band
-            radio.ser.write(civ_command(0x07, 0xD1 if want_band == 1 else 0xD0, None, addr))
+            radio.write_civ(civ_command(0x03, None, None, addr))
             await asyncio.sleep(0.04)
-            radio.ser.write(civ_command(0x03, None, None, addr))
+            radio.write_civ(civ_command(0x04, None, None, addr))
             await asyncio.sleep(0.03)
-            radio.ser.write(civ_command(0x04, None, None, addr))
-            await asyncio.sleep(0.03)
-            radio.ser.write(civ_command(0x14, 0x0A, None, addr))
+            radio.write_civ(civ_command(0x14, 0x0A, None, addr))
             if want_band == 1:
                 radio.state['taajuus_hz'] = radio.state['sub_hz']
                 radio.state['mode'] = radio.state['sub_mode']
@@ -2222,13 +3366,28 @@ async def api_cmd(request):
             radio.ser.write(civ_command(0x14, 0x0A, data_bytes, addr))
             await broadcast_state(rid)
 
+        elif cmd_type == 'repeater':
+            await radio.apply_repeater_settings(
+                dup=data.get('dup'),
+                offset_mhz=data.get('offset_mhz'),
+                tone_mode=data.get('tone_mode'),
+                ctcss=data.get('ctcss')
+            )
+            await broadcast_state(rid)
+
+        elif cmd_type == 'tone_burst':
+            active = bool(int(data.get('active', 0)))
+            freq_hz = float(data.get('freq', 1750.0))
+            await radio.set_tone_burst(active, freq_hz)
+            await broadcast_state(rid)
+
         return web.json_response({"status": "ok"})
     except Exception as e:
         return web.json_response({"status": "virhe", "error": str(e)})
 
 
 async def websocket_handler(request):
-    global desktop_window_focused
+    global desktop_window_focused, keybind_listening_radio
     ws = web.WebSocketResponse()
     await ws.prepare(request)
     ws_clients.add(ws)
@@ -2240,6 +3399,15 @@ async def websocket_handler(request):
                     d = json.loads(msg.data)
                     if d.get("type") == "window_focus":
                         desktop_window_focused = bool(d.get("focused", True))
+                    elif d.get("type") == "ptt":
+                        prid = str(d.get("radio_id", "1"))
+                        if prid in radios:
+                            await radios[prid].set_ptt(bool(int(d.get("ptt", 0))))
+                    elif d.get("type") == "keybind_listen":
+                        if d.get("listening"):
+                            keybind_listening_radio = str(d.get("radio_id", "1"))
+                        elif keybind_listening_radio == str(d.get("radio_id", "1")):
+                            keybind_listening_radio = None
                 except Exception:
                     pass
     finally:
@@ -2484,7 +3652,7 @@ async def api_aprs_config(request):
     aprs_engine.configure(data)
     
     aprs_cfg = global_config.setdefault("aprs", {})
-    for k in ["rx_enabled", "radio_id", "digi_enabled", "my_call", "allow_wide1", "allow_wide2",
+    for k in ["rx_enabled", "radio_id", "digi_enabled", "repeat_all", "wx_enabled", "freq_lock_enabled", "aprs_freq_hz", "my_call", "tocall", "allow_wide1", "allow_wide2",
               "tx_delay_ms", "beacon_enabled", "beacon_interval_min", "beacon_comment",
               "my_symbol", "my_symbol_table", "my_lat", "my_lon", "my_grid"]:
         if k in data:
@@ -2514,8 +3682,35 @@ async def api_aprs_clear(request):
 async def api_aprs_send_beacon(request):
     if not aprs_engine.my_call or aprs_engine.my_call == "N0CALL-10":
         return web.json_response({"status": "error", "message": "Please configure your Callsign first in APRS settings."}, status=400)
+    
+    rid = str(aprs_engine.radio_id or "2")
+    r = radios.get(rid)
+    aprs_cfg = global_config.get("aprs", {})
+    if aprs_cfg.get("freq_lock_enabled", True) and r and r.state.get('online', False):
+        curr_band = getattr(r, 'current_band', 0)
+        curr_hz = int((r.state.get('sub_hz') if curr_band == 1 else r.state.get('main_hz')) or r.state.get('taajuus_hz', 0) or 0)
+        curr_mode = str((r.state.get('sub_mode') if curr_band == 1 else r.state.get('main_mode')) or r.state.get('mode', 'FM') or 'FM')
+        target_hz = int(aprs_cfg.get("aprs_freq_hz", 144800000))
+        if curr_hz > 0 and (abs(curr_hz - target_hz) > 500 or not curr_mode.upper().startswith("FM")):
+            return web.json_response({
+                "status": "error",
+                "message": f"TX BLOCKED by Frequency Safety Lock! Radio {rid} is tuned to {curr_hz/1e6:.4f} MHz ({curr_mode}). Please tune to {target_hz/1e6:.3f} MHz FM first."
+            }, status=400)
+
     success = aprs_engine.send_beacon()
     return web.json_response({"status": "ok" if success else "error"})
+
+
+async def api_aprs_fetch_weather(request):
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    force = bool(data.get("force", True))
+    wx = aprs_engine.get_weather(force=force)
+    if wx:
+        return web.json_response({"status": "ok", "weather": wx})
+    return web.json_response({"status": "error", "message": "Failed to fetch weather from Open-Meteo. Check internet connection and coordinates."}, status=500)
 
 
 async def api_aprs_tune(request):
@@ -2538,6 +3733,9 @@ async def api_aprs_tune(request):
     await asyncio.sleep(0.02)
     # Ensure data mode off
     r.ser.write(civ_command(0x1A, 0x06, bytes([0x00, 0x01]), addr))
+    await asyncio.sleep(0.02)
+    # Ensure DATA OFF MOD is USB (0x03)
+    r.ser.write(civ_command(0x1A, 0x05, bytes([0x01, 0x15, 0x03]), addr))
     await broadcast_state(rid)
     return web.json_response({"status": "ok", "message": f"Tuned radio {rid} to {freq_hz/1e6:.3f} MHz FM"})
 
@@ -2573,6 +3771,8 @@ def create_app():
         web.post('/api/aprs/clear', api_aprs_clear),
         web.post('/api/aprs/send_beacon', api_aprs_send_beacon),
         web.post('/api/aprs/tune', api_aprs_tune),
+        web.post('/api/aprs/fetch_weather', api_aprs_fetch_weather),
+        web.get('/api/aprs/weather', api_aprs_fetch_weather),
         web.get('/ws', websocket_handler),
         web.get('/ws_audio', websocket_audio_handler)
     ])
@@ -2618,10 +3818,11 @@ def start_background_server(ready_event: threading.Event):
         asyncio.create_task(global_ptt_monitor_loop())
         for srv in rigctld_servers.values():
             srv.start()
-        for rid in ("1", "2"):
-            rconf = global_config["radios"].get(rid, {})
-            if rconf.get("auto_connect", True) and rconf.get("port"):
-                await radios[rid].connect(rconf["port"], rconf.get("baud", 115200))
+        active_rids = global_config.get("active_radios", ["1"])
+        for rid in active_rids:
+            rconf = global_config["radios"].get(str(rid), {})
+            if rconf.get("auto_connect", True) and rconf.get("port") and str(rid) in radios:
+                await radios[str(rid)].connect(rconf["port"], rconf.get("baud", 115200))
 
     loop.create_task(init_tasks())
     ready_event.set()

@@ -5,7 +5,7 @@ a = Analysis(
     ['server.py'],
     pathex=[],
     binaries=[],
-    datas=[('index.html', '.'), ('desktop.html', '.'), ('cert.pem', '.'), ('key.pem', '.'), ('static', 'static')],
+    datas=[('index.html', '.'), ('desktop.html', '.'), ('cert.pem', '.'), ('key.pem', '.'), ('static', 'static'), ('direwolf.exe', '.'), ('gen_packets.exe', '.'), ('pthreadVC2.dll', '.'), ('msvcr100.dll', '.')],
     hiddenimports=['aprslib', 'aprs_modem'],
     hookspath=[],
     hooksconfig={},
