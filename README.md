@@ -6,6 +6,37 @@ Featuring real-time 2D/3D waterfall spectrum display with interactive bookmark m
 
 ![ICOM Remote Screenshot](docs/screenshot.png)
 
+<br>
+
+<table>
+  <tr>
+    <td width="320" align="center" valign="top">
+      <img src="docs/mobile_screenshot.png" alt="Mobile Web Interface" width="300" style="border-radius: 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.4);" />
+    </td>
+    <td valign="top" style="padding-left: 18px;">
+      <h3>📱 Mobile Remote Access & Web Interface</h3>
+      <p>
+        Control and monitor your transceivers on the go from any smartphone, tablet, or secondary laptop on your local Wi-Fi or secure VPN (Tailscale, WireGuard).
+      </p>
+      <ul>
+        <li><strong>Live VFO Tuning & Modulation:</strong> Real-time frequency control, quick band jumping, and mode switching (USB, LSB, FM, AM, CW, Data).</li>
+        <li><strong>Bidirectional Low-Latency Audio:</strong> High-fidelity audio streaming to your mobile browser with instant touch-and-hold PTT using your phone's microphone.</li>
+        <li><strong>Interactive S-Meter & Bookmarks:</strong> Live signal strength metering and one-tap tuning to your saved repeater and simplex channels.</li>
+        <li><strong>Configurable PIN Security:</strong> Secure HTTPS encryption with an optional 4-digit PIN code (easily modified or disabled in settings).</li>
+      </ul>
+      <p><strong>📲 Connecting from Mobile:</strong></p>
+      <ol>
+        <li>Connect your phone/tablet to the same Wi-Fi or VPN as the host PC.</li>
+        <li>Open the local HTTPS address displayed in the desktop app (e.g. <code>https://192.168.1.xxx:8085</code>).</li>
+        <li>Accept the self-signed SSL certificate warning once to enable audio/mic permissions.</li>
+        <li>Enter your PIN code (if enabled) and enjoy full wireless remote control!</li>
+      </ol>
+    </td>
+  </tr>
+</table>
+
+<br>
+
 ---
 
 ## 🆕 What's New (Latest Release)
@@ -126,23 +157,6 @@ Featuring real-time 2D/3D waterfall spectrum display with interactive bookmark m
    ```bash
    python server.py
    ```
-
----
-
-## 📱 Mobile Remote Access & Web Interface
-
-The application features a dedicated mobile-optimized HTTPS web interface designed for smartphones and tablets. It allows you to monitor and control your transceivers on the go — featuring real-time frequency tuning, band/mode switching, audio streaming, interactive S-meter, and responsive touch PTT over your home Wi-Fi or secure VPN (e.g., Tailscale / WireGuard).
-
-<p align="center">
-  <img src="docs/mobile_screenshot.png" alt="Mobile Web Interface" width="360" style="border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);" />
-</p>
-
-### 📲 Connecting from Your Phone or Tablet:
-1. Ensure your mobile device and the host PC are on the same Wi-Fi network or connected via VPN.
-2. In the desktop application or server console, check your local HTTPS address (e.g. `https://192.168.1.xxx:8085`).
-3. Open the URL in your mobile browser (Safari on iOS, Chrome / Firefox on Android).
-4. Because the server uses self-signed SSL certificates for local encryption, accept the browser's certificate warning once to enable microphone and Web Audio streaming permissions.
-5. Enter your security PIN (can be customized or disabled completely from the desktop app's PIN settings) to unlock full remote controls!
 
 ---
 
