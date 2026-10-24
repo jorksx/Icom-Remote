@@ -129,12 +129,20 @@ Featuring real-time 2D/3D waterfall spectrum display with interactive bookmark m
 
 ---
 
-## 📱 Mobile Remote Access
+## 📱 Mobile Remote Access & Web Interface
 
-1. Ensure the host computer and your mobile device are connected to the same local network (Wi-Fi) or VPN.
-2. In the desktop application, the local HTTPS URL is displayed (e.g. `https://192.168.1.xxx:8085`).
-3. Open the URL in your mobile browser (Safari, Chrome, Firefox).
-4. Because self-signed certificates are used for local LAN encryption, accept the browser certificate warning once to enable audio and microphone streaming.
+The application features a dedicated mobile-optimized HTTPS web interface designed for smartphones and tablets. It allows you to monitor and control your transceivers on the go — featuring real-time frequency tuning, band/mode switching, audio streaming, interactive S-meter, and responsive touch PTT over your home Wi-Fi or secure VPN (e.g., Tailscale / WireGuard).
+
+<p align="center">
+  <img src="docs/mobile_screenshot.png" alt="Mobile Web Interface" width="360" style="border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);" />
+</p>
+
+### 📲 Connecting from Your Phone or Tablet:
+1. Ensure your mobile device and the host PC are on the same Wi-Fi network or connected via VPN.
+2. In the desktop application or server console, check your local HTTPS address (e.g. `https://192.168.1.xxx:8085`).
+3. Open the URL in your mobile browser (Safari on iOS, Chrome / Firefox on Android).
+4. Because the server uses self-signed SSL certificates for local encryption, accept the browser's certificate warning once to enable microphone and Web Audio streaming permissions.
+5. Enter your security PIN (can be customized or disabled completely from the desktop app's PIN settings) to unlock full remote controls!
 
 ---
 
