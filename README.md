@@ -1,76 +1,78 @@
-# Icom Remote - Dual Radio Web & Desktop Controller
+# Icom & Yaesu Remote - Multi-Radio Web & Desktop Controller
 
-A modern, high-performance remote control and spectrum monitoring application for **Icom transceivers** (specialized for **IC-7300** and **IC-9700**, compatible with other CI-V Icom radios).
+A modern, high-performance remote control and spectrum monitoring application for **Icom transceivers** (**IC-7300**, **IC-9700**, and other CI-V radios) as well as **Yaesu HF transceivers** (**FT-891**, **FT-991A**, **FT-DX10**).
 
-Featuring real-time 2D/3D waterfall spectrum display, bidirectional low-latency audio streaming, built-in Hamlib `rigctld` server for WSJT-X / digital modes, frequency bookmarks, and a mobile-friendly HTTPS interface.
+Featuring real-time 2D/3D waterfall spectrum display with interactive bookmark markers, ultra-low-latency (16 ms) bidirectional audio streaming & contest-grade PTT turnaround, VHF/UHF repeater & CTCSS / 1750 Hz tone burst automation, built-in Hamlib `rigctld` server for WSJT-X / digital modes, per-radio WAV audio recording, APRS digipeater with OpenStreetMap, and a mobile-friendly HTTPS interface.
 
 ![ICOM Remote Screenshot](docs/screenshot.png)
 
 ---
 
-## ✨ Features
+## 🆕 What's New (Latest Release)
 
-- **Dual Radio Management:**
-  - Control two Icom radios simultaneously (e.g., **IC-7300** for HF/50 MHz and **IC-9700** for VHF/UHF/1.2 GHz).
-  - Independent VFO A/B controls, Main and Sub VFO monitoring, split operation, and quick band switching.
+- **⚡ Ultra-Low Latency Contest PTT & RX Audio Recovery (16 ms):**
+  - Zero-delay hardware PTT unkey (`TX0;` / `1C 00 00`) sent at `0 ms` before audio stream teardown.
+  - Upgraded audio engine to `256`-sample (`16 ms`, `latency='low'`) blocks with asynchronous `abort()` TX teardown and instant speaker queue flush so you never miss the first syllable of an answering station in SSB contests.
+  - Direct WebSocket PTT signaling and `5 ms` kernel-level keyboard & mouse side-button (`Mouse4` / `Mouse5` / `MouseMid`) PTT polling.
+- **📍 Interactive Waterfall Bookmark Markers (IC-7300 & IC-9700):**
+  - Saved bookmarks within the active waterfall span automatically appear on the 2D/3D hardware waterfall with a vertical dashed marker line, pointer triangle (`▼`), and station/repeater name badge (e.g., `Pori`).
+  - **Click-on-Marker Tuning:** Click any bookmark badge directly on the waterfall to jump to that frequency and automatically load its mode and repeater settings.
+  - Accurate CI-V `27 00` Division 1 real-time span decoding (`±2.5 kHz` .. `±500 kHz`) with left/right band-edge frequency indicators.
+- **🗼 VHF/UHF Repeater, CTCSS & 1750 Hz Tone Burst System (IC-9700):**
+  - Full repeater control bar for VHF/UHF: **DUP (`OFF` / `DUP-` / `DUP+`)**, **Shift Offset (MHz)**, **Tone Mode (`OFF` / `1750Hz` / `TONE` / `TSQL`)**, and **50 Standard CTCSS Sub-Audible Tones (`67.0 Hz` – `254.1 Hz`)**.
+  - **Dedicated `🔔 TONE` (1750 Hz) Burst Button:** Compact wake-up tone button next to PTT that keys the radio and transmits a pure 1750 Hz sine wave burst (short click sends an automatic 650 ms pulse, or hold for manual length).
+  - **Automatic Per-Repeater & Per-Frequency Memory:** Remembers `DUP`, `Shift`, `TONE`, and `CTCSS` settings for each repeater/bookmark automatically when switching frequencies.
+  - **Smart Dual-VFO (`MAIN` / `SUB`) Band Swap:** Jumping from a VHF bookmark to a UHF bookmark (or vice versa) on IC-9700 automatically triggers `Swap M/S (07 B0)` so `MAIN VFO` seamlessly switches to the target band without flicker.
+- **🔬 Razor-Sharp 2D & 3D Waterfall Engine:**
+  - 1D Unsharp Mask peak deconvolution and 72nd-percentile adaptive noise floor tracking eliminate wide-pixel blur and background mush while keeping narrow CW/SSB/FM signals 1-pixel sharp.
+  - Native 1×1 pixel high-DPI thermal noise decorrelation between CI-V sweeps.
+- **📻 Up to 3 Simultaneous Radios & Full Yaesu FT-891 Support:**
+  - Dynamic 1-to-3 radio deck layout (`IC-7300`, `IC-9700`, `Yaesu FT-891`) with top-bar visibility pills.
+  - Full Yaesu CAT support including menu `11-07 [SSB BFO]` forced `LSB` / `USB` sideband switching, calibrated hardware S-meter (`S0..S9..+60dB`), and a dedicated **3.2 kHz Passband Audio FFT 2D/3D Waterfall**.
+- **🎙️ Per-Radio Audio Recording (`REC` -> `.wav`) & Interactive S-Meter Squelch:**
+  - Record received audio directly from any radio to a timestamped 16-bit PCM `.wav` file (`Model_Freq_Mode_Timestamp.wav`).
+  - Clickable & draggable **SQL (Squelch)** threshold marker directly on the S-meter bar with automatic audio activation.
+
+---
+
+## ✨ Core Features
+
+- **Multi-Radio Management (Up to 3 Radios Simultaneously):**
+  - Control up to three transceivers at the same time (e.g., **IC-7300** for HF/50 MHz, **IC-9700** for VHF/UHF/1.2 GHz, and **Yaesu FT-891**).
+  - Independent VFO controls, IC-9700 Dualwatch (`MAIN` & `SUB` VFO) synchronization, split operation, and quick band switching.
 
 - **High-Resolution 2D & 3D Waterfall & Spectrum Engine:**
-  - Real-time CI-V spectrum scope capture directly over USB at up to 60 FPS.
-  - **Perceptual Dynamic Range (`Gamma 0.55`):** Soft-knee transfer function illuminates faint signals and speech skirts (1.5–2.8 kHz) in vivid royal blue and cyan.
-  - **Full 2.8 kHz SSB Audio Bandwidth:** Instantly recognize transmission width and sideband slope asymmetry (USB vs LSB) just like on the radio's physical LCD.
-  - **Zero-Vertical-Streak Waterfall:** RF white-noise temporal decorrelation eliminates artificial column lines when idling.
-  - **Dynamic Floor, Gain & Peak Controls:** Floor range `-30` to `+60` (default `0`), Gain `10` to `200`, and Peak ceiling controls with persistent memory.
+  - Real-time CI-V spectrum scope capture directly over USB at up to 60 FPS (plus 4096-point Hanning FFT audio scope for Yaesu).
+  - **1D Peak Sharpening & Adaptive Noise Gate:** Keeps background band noise dark and clean while illuminating weak signals and SSB speech formants.
+  - **Interactive Bookmark Overlay:** Displays saved bookmarks directly on the waterfall at their exact RF coordinates.
+  - **Dynamic Floor, Gain, Peak & Speed Controls:** Floor range `-30` to `+60`, Gain `10` to `200`, Peak `30` to `160`, and scroll speed `1x` to `5x` with persistent per-radio memory.
   - **Interactive 3D Waterfall (3DSS):** High-density perspective surface ridges with synchronized dynamic range.
-  - **Non-Intrusive CI-V Lifecycle:** Safely disconnects PTT without ever closing or hiding the spectrum scope on the radio's physical touchscreen.
-  - **Click-to-Tune & Mouse Wheel Tuning:** Click anywhere on the spectrum or waterfall to tune; hover and scroll mouse wheel to step in 0.5 kHz grid-aligned increments.
+  - **Click-to-Tune & Mouse Wheel Tuning:** Click anywhere on the spectrum, waterfall, or bookmark markers to tune; hover and scroll mouse wheel to step in 0.5 kHz increments.
 
-- **Low-Latency Bidirectional Audio:**
+- **Low-Latency Bidirectional Audio & Contest PTT:**
   - Isolated audio paths: streaming audio to a mobile phone or remote browser does **not** trigger the local PC speakers in the shack.
-  - Independent audio engines for each radio channel.
-  - Remote PTT & high-quality microphone transmission with audio level monitoring.
+  - Ultra-low 16 ms audio block processing with anti-VOX loopback protection for external interfaces (e.g., SignaLink USB).
+  - Bind any keyboard key or mouse side button (`Mouse4`, `Mouse5`, `MouseMid`) as a local or global PTT trigger.
+
+- **Frequency Bookmarks, Quick Bar & Repeater Profiles:**
+  - Per-radio filtered **Quick Bookmarks** strip right below the VFO display (shows only bookmarks assigned to that specific transceiver).
+  - Strict target radio locking (`IC-7300`, `IC-9700`, `Yaesu FT-891`, or `AUTO`) with a smooth *"Radio not connected"* fade notification if the target radio is offline.
+  - Store complete VHF/UHF repeater profiles (`DUP-`/`DUP+`, `Shift MHz`, `TONE`/`TSQL`/`1750Hz`, and `CTCSS Hz`) inside bookmarks.
+  - **Drag-and-Drop Reordering:** Freely rearrange saved station memories with drag handle (`⠿`) or quick `▲` / `▼` step buttons.
 
 - **Mobile Web Interface (HTTPS) & Configurable PIN Security:**
   - Fully responsive web UI accessible from any smartphone, tablet, or secondary laptop on your LAN/Wi-Fi or over VPN/Tailscale.
   - Secure HTTPS support for microphone input and Web Audio API permissions.
   - **Configurable PIN Protection:** Quick topbar button to change PIN code or disable PIN prompt completely for seamless local network access.
-  - Dynamic server-side authentication and session management.
 
 - **Built-in Hamlib `rigctld` Emulation:**
-  - Integrated rigctld TCP servers (default ports `4532` and `4533`).
+  - Integrated rigctld TCP servers (ports `4532`, `4533`, and `4534`).
   - Connect **WSJT-X**, **JTDX**, **FLDigi**, **Log4OM**, or **N1MM** directly over TCP without needing physical CI-V splitters or virtual COM-port pairs.
 
-- **Integrated 2m APRS Packet Radio & 1200 Baud Bell 202 Demodulator:**
-  - Real-time 1200 baud Bell 202 AFSK packet demodulation directly from radio USB audio (144.800 MHz standard or customizable).
-  - High-performance streaming matched-filter I/Q envelope detector with zero-crossing DPLL symbol clock recovery.
-  - Robust HDLC frame assembly, bit unstuffing, and CRC-16 CCITT verification.
-  - Real-time Heard Stations list with Call+SSID, time ago, Maidenhead Grid Locator, Distance & Bearing, Speed, Heading, and beacon comments.
-  - Quick "⚡ Tune 144.800 FM" button for 1-click frequency setup.
-
-- **Interactive OpenStreetMap (Leaflet) Mapping:**
-  - 100% free OpenStreetMap and CartoDB Dark Matter layers (Zero paid API keys required).
-  - Bundled local Leaflet library for reliable offline operation during field days and emergency communications.
-  - Stations plotted on map with SSID badges and APRS symbol icons (🚗 Mobile, 🏠 Base, 📡 Digipeater, 🌧️ WX, 🚶 Pedestrian, etc.).
-  - Rich interactive popups on marker click displaying full station metrics, coordinates, distance/bearing, telemetry, and raw path.
-  - Split View, Map Only, and List Only viewing modes with full-screen maximization.
-
-- **Autonomous APRS Digipeater (New-N Paradigm):**
-  - Dedicated **ON / OFF switch** to instantly switch between normal receiver and active digipeater mode.
-  - Full New-N paradigm path processor (`WIDE1-1`, `WIDE2-n`, direct call matching) with hop decrementing and loop prevention.
-  - 30-second duplicate suppression cache prevents ping-pong loops and redundant transmissions.
-  - Automated Bell 202 audio generation and CI-V PTT keying over USB with carrier-sense (CSMA) backoff.
-  - Optional periodic position beacon with Maidenhead locator and custom comment.
-  - Full local persistence in `icom_config.json`, `aprs_stations.json`, and browser `localStorage`.
-
-- **Frequency Bookmarks & Interactive Reordering:**
-  - Save current operating frequencies with one click directly from the radio header or bookmarks drawer (`+ ⭐ Bookmark`).
-  - **Drag-and-Drop Reordering:** Freely rearrange saved station memories with drag handle (`⠿`) or quick `▲` / `▼` step buttons.
-  - Auto-matching to active VFO and band (HF vs VHF/UHF) or manual target radio assignment.
-  - Fully synced and persisted in `icom_config.json` and persistent webview storage.
-
-- **Dual-Persistence Engine & Desktop App:**
-  - Standalone desktop application window powered by PyWebView with dedicated persistent profile storage.
-  - Waterfall controls (Noise Floor `-30..60`, Gain `10..200`, Peak Ceiling `30..160`, Speed `1x..5x`, and 2D/3D mode) and bookmarks automatically sync to `icom_config.json`.
-  - System tray support with clean background operation.
+- **Integrated 2m APRS Packet Radio, OpenStreetMap & Digipeater:**
+  - Real-time 1200 baud Bell 202 AFSK packet demodulation directly from radio USB audio (144.800 MHz FM with Frequency Safety Lock).
+  - Interactive **OpenStreetMap / CartoDB Dark Matter** station map with APRS symbols, SSID badges, distance/bearing, and weather station telemetry.
+  - Autonomous **New-N Paradigm (`WIDE1-1`, `WIDE2-n`) Digipeater** with duplicate suppression, carrier-sense (CSMA), and periodic position/weather beaconing.
 
 ---
 
